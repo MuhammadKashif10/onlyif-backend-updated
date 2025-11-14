@@ -8,20 +8,21 @@ const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
 const http = require('http');
-const { Server } = require('socket.io'); // ✅ import Server from socket.io
+const { Server } = require('socket.io');
 const bodyParser = require('body-parser');
-
 const path = require('path');
 require('dotenv').config();
 
-// Database connection
+// Database
 const connectDB = require('./config/db');
 
 // Middleware imports
 const { errorHandler } = require('./middleware/errorHandler');
-const { generalLimiter, authLimiter, messageLimiter } = require('./middleware/rateLimitMiddleware');
 
-// Route imports
+// Rate limits
+const { generalLimiter } = require('./middleware/rateLimitMiddleware');
+
+// Routes
 const authRoutes = require('./routes/authRoutes');
 const webhookRoutes = require('./routes/webhookRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
@@ -43,77 +44,62 @@ const paymentRecordRoutes = require('./routes/paymentRecordRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const socketConnection = require('./config/socketConnection');
 
-// Connect to database
+// Connect to DB
 connectDB();
 
 const app = express();
-// ✅ Stripe webhook must use raw body — mount first
+
+// Stripe webhook (raw body)
 app.use(
   '/api/webhook/stripe-webhook',
   bodyParser.raw({ type: 'application/json' }),
   webhookRoutes
 );
-const server = http.createServer(app); // IMPORTANT
+
+const server = http.createServer(app);
+
+// SOCKET.IO
 const io = new Server(server, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3010'],
+    origin: process.env.FRONTEND_URL,
     methods: ['GET', 'POST'],
     credentials: true
   }
 });
-
-// Make io available to routes/controllers if needed
 app.locals.io = io;
 
-// Attach socket.io
-// socketConnection(io, app);
 app.set('connectedUsers', []);
 
-// Enhanced CORS configuration for frontend at localhost:3010
+// ------------------ CORS (Production Ready) ------------------
+
 const corsOptions = {
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3010',
-    'http://127.0.0.1:3010',
-    'http://127.0.0.1:3000'
-  ],
+  origin: process.env.FRONTEND_URL,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 
-    'Authorization', 
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Request-Method',
-    'Access-Control-Request-Headers'
-  ],
-  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar'],
-  optionsSuccessStatus: 200
+  allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
 app.use(cors(corsOptions));
 
-// Additional CORS headers for static files and all responses
+// Universal Headers
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:3010');
+  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
   res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    res.sendStatus(200);
-  } else {
-    next();
-  }
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
 });
 
-// Configure helmet with relaxed settings for development
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginEmbedderPolicy: false
-}));
+// -------------------------------------------------------------
+
+// Helmet
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));
@@ -123,62 +109,48 @@ app.use(mongoSanitize());
 app.use(xss());
 app.use(hpp());
 
-// Logging middleware
+// Logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Rate limiting
 app.use(generalLimiter);
 
-// Serve static files from uploads directory with explicit CORS headers
-app.use('/uploads', (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'http://localhost:3010');
-  res.header('Access-Control-Allow-Methods', 'GET');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-  next();
-}, express.static(path.join(__dirname, 'uploads'), {
-  setHeaders: (res, path) => {
-    res.set('Access-Control-Allow-Origin', 'http://localhost:3010');
-    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
-  }
-}));
+// Serve Static
+app.use(
+  '/uploads',
+  (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
+    next();
+  },
+  express.static(path.join(__dirname, 'uploads'))
+);
 
-// Health check endpoint
+// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
-// API health check endpoints
-app.get('/api', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'API is working 🚀'
+    uptime: process.uptime(),
   });
 });
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
-    message: 'API is working 🚀'
+    message: 'API is working 🚀',
   });
 });
 
-// Routes
+// ------------------ Routes ------------------
+
 app.use('/api/auth', authRoutes);
 app.use('/api/chatting', chatRoutes);
 app.use('/api/invoices', invoiceRoutes);
-
-// ✅ Normal routes can use JSON parser
 app.use('/api/payment', paymentRoutes);
-socketConnection(io,app);
+socketConnection(io, app);
 
 app.use('/api/properties', propertyRoutes);
-// The admin routes should be mounted like this:
 app.use('/api/admin', adminRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
@@ -192,27 +164,26 @@ app.use('/api/agent', agentRoutes);
 app.use('/api/agents', agentsRoutes);
 app.use('/api/admin/payment-records', paymentRecordRoutes);
 app.use('/api/cash-offers', require('./routes/cashOfferRoutes'));
-// Public settings endpoint (e.g., maintenance mode)
 app.use('/api/settings', settingsRoutes);
 
-// Catch all handler
+// 404 Handler
 app.all('*', (req, res) => {
   res.status(404).json({
     success: false,
-    message: `Route ${req.originalUrl} not found`
+    message: `Route ${req.originalUrl} not found`,
   });
 });
 
-// Error handling middleware (must be last)
+// Global Error Handler
 app.use(errorHandler);
 
-// Start server
-const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => {
+// ------------------ Start Server ------------------
+
+const PORT = process.env.PORT || 8080; // Railway uses 8080
+
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📁 Uploads directory: ${path.join(__dirname, 'uploads')}`);
-  console.log(`🌐 CORS enabled for: http://localhost:3010`);
+  console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL}`);
 });
 
 module.exports = app;
