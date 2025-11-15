@@ -140,6 +140,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Root route
+app.get('/', (req, res) => {
+  return res.status(200).json({
+    success: true,
+    message: 'Backend is running successfully!',
+  });
+});
+
 // ------------------ Routes ------------------
 
 app.use('/api/auth', authRoutes);
