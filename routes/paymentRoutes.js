@@ -41,7 +41,7 @@ router.post('/checkout/:propertyId', authMiddleware, async (req, res) => {
       return res.json({ alreadyPaid: true });
     }
 
-    const front = process.env.FRONTEND_URL || 'http://localhost:3010';
+    const front = process.env.FRONTEND_URL || process.env.BACKEND_URL || '';
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       payment_method_types: ['card'],
@@ -171,8 +171,8 @@ router.post('/initialize', authMiddleware, async (req, res) => {
           quantity: 1
         }
       ],
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:3010'}/dashboards/seller/account?tab=payments&payment=success&invoice=${invoiceId}&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3010'}/dashboards/seller/account?tab=payments&payment=cancelled`,
+      success_url: `${process.env.FRONTEND_URL || process.env.BACKEND_URL || ''}/dashboards/seller/account?tab=payments&payment=success&invoice=${invoiceId}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || process.env.BACKEND_URL || ''}/dashboards/seller/account?tab=payments&payment=cancelled`,
       metadata: {
         type: 'commission_payment',
         invoiceId: invoiceId,

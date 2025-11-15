@@ -265,8 +265,8 @@ router.get('/:invoiceId/pdf', authMiddleware, asyncHandler(async (req, res) => {
             },
             quantity: 1
           }],
-          success_url: `${process.env.FRONTEND_URL || 'http://localhost:3010'}/dashboards/seller/account?tab=payments&payment=success&invoice=${invoice._id}`,
-          cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3010'}/dashboards/seller/account?tab=payments&payment=cancelled`,
+          success_url: `${process.env.FRONTEND_URL || process.env.BACKEND_URL || ''}/dashboards/seller/account?tab=payments&payment=success&invoice=${invoice._id}`,
+          cancel_url: `${process.env.FRONTEND_URL || process.env.BACKEND_URL || ''}/dashboards/seller/account?tab=payments&payment=cancelled`,
           metadata: { type: 'commission_payment', invoiceId: invoice._id.toString(), amount: (amountDue/100).toString() }
         });
 

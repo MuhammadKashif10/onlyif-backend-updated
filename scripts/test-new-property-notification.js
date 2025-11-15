@@ -15,7 +15,7 @@ async function testNewPropertyNotification() {
     console.log('🧪 Starting New Property Notification Test...\n');
 
     // Connect to database
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/onlyif-real');
+    await mongoose.connect(process.env.MONGODB_URI || process.env.MONGO_URI);
     console.log('✅ Connected to database');
 
     // Find or create a test buyer user
