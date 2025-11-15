@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const compression = require('compression');
@@ -70,24 +69,27 @@ app.locals.io = io;
 
 app.set('connectedUsers', []);
 
-// ------------------ CORS (Production Ready) ------------------
+// ------------------ CORS (Custom Middleware) ------------------
 
-const corsOptions = {
-  origin: process.env.FRONTEND_URL,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+const allowedOrigins = [
+  "https://onlyif-frontend-updated-production.up.railway.app",
+  "http://localhost:3000"
+];
 
-app.use(cors(corsOptions));
-
-// Universal Headers
 app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  const origin = req.headers.origin;
+
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
   next();
 });
 
@@ -119,10 +121,6 @@ app.use(generalLimiter);
 // Serve Static
 app.use(
   '/uploads',
-  (req, res, next) => {
-    res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL);
-    next();
-  },
   express.static(path.join(__dirname, 'uploads'))
 );
 
