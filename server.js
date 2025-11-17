@@ -48,9 +48,22 @@ const socketConnection = require('./config/socketConnection');
 
 const app = express();
 
+const allowedOrigins = [
+  'http://localhost:3010', // local dev
+  'https://your-frontend-domain.com' // production frontend
+];
+
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  origin: function(origin, callback){
+    if(!origin) return callback(null, true); // for tools like Postman
+    if(allowedOrigins.includes(origin)){
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true
 }));
 
 
