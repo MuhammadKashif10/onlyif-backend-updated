@@ -49,6 +49,12 @@ connectDB();
 
 const app = express();
 
+app.use(cors({
+  origin: 'http://localhost:3010', // frontend URL
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true // if you use cookies or auth headers
+}));
+
 // Stripe webhook (raw body)
 app.use(
   '/api/webhook/stripe-webhook',
@@ -94,31 +100,7 @@ app.set('connectedUsers', []);
 //   next();
 // });
 
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://localhost:5173",
-  "http://localhost:3010",
-  "https://onlyif-frontend-updated-production.up.railway.app"
-];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests from tools like Postman (no origin)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.log("❌ BLOCKED ORIGIN:", origin);
-        callback(new Error("CORS blocked"));
-      }
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
 
 // -------------------------------------------------------------
 
@@ -216,7 +198,6 @@ const PORT = process.env.PORT || 8080; // Railway uses 8080
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌐 FRONTEND_URL: ${process.env.FRONTEND_URL}`);
 });
 
 module.exports = app;
