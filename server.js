@@ -60,7 +60,8 @@ const server = http.createServer(app);
 // SOCKET.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL,
+    // origin: process.env.FRONTEND_URL,
+    origin: "http://localhost:3010",
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -73,7 +74,8 @@ app.set('connectedUsers', []);
 
 const allowedOrigins = [
   "https://onlyif-frontend-updated-production.up.railway.app",
-  "http://localhost:3000"
+  "http://localhost:3000",
+  "http://localhost:3010",
 ];
 
 app.use((req, res, next) => {
