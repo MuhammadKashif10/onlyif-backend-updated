@@ -45,15 +45,14 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const socketConnection = require('./config/socketConnection');
 
 // Connect to DB
-connectDB();
 
 const app = express();
 
 app.use(cors({
-  origin: 'http://localhost:3010', // frontend URL
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  credentials: true // if you use cookies or auth headers
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
+
 
 // Stripe webhook (raw body)
 app.use(
@@ -75,36 +74,8 @@ const io = new Server(server, {
 app.locals.io = io;
 
 app.set('connectedUsers', []);
+connectDB();
 
-// ------------------ CORS (Custom Middleware) ------------------
-
-// const allowedOrigins = [
-//   "https://onlyif-frontend-updated-production.up.railway.app",
-//   "http://localhost:3000"
-// ];
-
-// app.use((req, res, next) => {
-//   const origin = req.headers.origin;
-
-//   if (allowedOrigins.includes(origin)) {
-//     res.setHeader("Access-Control-Allow-Origin", origin);
-//   }
-
-//   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-//   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-//   res.setHeader("Access-Control-Allow-Credentials", "true");
-
-//   if (req.method === "OPTIONS") {
-//     return res.sendStatus(200);
-//   }
-//   next();
-// });
-
-
-
-// -------------------------------------------------------------
-
-// Helmet
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: 'cross-origin' },
