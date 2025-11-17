@@ -7,6 +7,7 @@ const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const hpp = require('hpp');
 const http = require('http');
+const cors = require('cors');
 const { Server } = require('socket.io');
 const bodyParser = require('body-parser');
 const path = require('path');
@@ -60,8 +61,7 @@ const server = http.createServer(app);
 // SOCKET.IO
 const io = new Server(server, {
   cors: {
-    // origin: process.env.FRONTEND_URL,
-    origin: "http://localhost:3010",
+    origin: process.env.FRONTEND_URL,
     methods: ['GET', 'POST'],
     credentials: true
   }
@@ -72,29 +72,43 @@ app.set('connectedUsers', []);
 
 // ------------------ CORS (Custom Middleware) ------------------
 
-const allowedOrigins = [
-  "https://onlyif-frontend-updated-production.up.railway.app",
-  "http://localhost:3000",
-  "http://localhost:3010",
-];
+// const allowedOrigins = [
+//   "https://onlyif-frontend-updated-production.up.railway.app",
+//   "http://localhost:3000"
+// ];
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
+// app.use((req, res, next) => {
+//   const origin = req.headers.origin;
 
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
+//   if (allowedOrigins.includes(origin)) {
+//     res.setHeader("Access-Control-Allow-Origin", origin);
+//   }
 
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+//   res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+//   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+//   res.setHeader("Access-Control-Allow-Credentials", "true");
 
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
+//   if (req.method === "OPTIONS") {
+//     return res.sendStatus(200);
+//   }
+//   next();
+// });
 
+const allowedOrigins = ['http://localhost:5173', 'http://localhost:3000','http://localhost:3010','https://onlyif-backend-updated-production-b4e3.up.railway.app/api'];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    methods: ['GET', 'POST','PUT','DELETE','PATCH'],
+    credentials: true
+};
+
+app.use(cors(corsOptions));
 // -------------------------------------------------------------
 
 // Helmet
