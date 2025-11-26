@@ -54,7 +54,8 @@ const app = express();
 // Allowed frontend origins
 const allowedOrigins = [
   'http://localhost:3010', // local dev
-  'https://your-production-frontend.com', // replace with your deployed frontend
+  'https://onlyif.vercel.app', // replace with your deployed frontend
+  'https://onlyif.com.au'
 ];
 
 // CORS middleware
