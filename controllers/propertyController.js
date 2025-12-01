@@ -486,15 +486,15 @@ const createProperty = async (req, res) => {
       lotSize: lotSize ? parseFloat(lotSize) : undefined
     };
 
-    // Handle image uploads from req.files
+    // Handle image uploads from req.files (Cloudinary via multer-storage-cloudinary)
     if (req.files && req.files.images && req.files.images.length > 0) {
       const imagesArray = [];
       let mainImageUrl = null;
 
-      // Process each uploaded file
+      // Each file now contains Cloudinary data; `file.path` is the URL.
       req.files.images.forEach((file, index) => {
-        const imageUrl = `/uploads/images/${file.filename}`;
-        
+        const imageUrl = file.path;
+
         imagesArray.push({
           url: imageUrl,
           caption: file.originalname,
@@ -519,19 +519,19 @@ const createProperty = async (req, res) => {
       propertyData.finalImageUrl = { url: null };
     }
 
-    // Handle floor plans
+    // Handle floor plans (Cloudinary URLs)
     if (req.files && req.files.floorPlans && req.files.floorPlans.length > 0) {
       propertyData.floorPlans = req.files.floorPlans.map((file, index) => ({
-        url: `/uploads/floorplans/${file.filename}`,
+        url: file.path,
         caption: file.originalname,
         order: index
       }));
     }
 
-    // Handle videos
+    // Handle videos (Cloudinary URLs)
     if (req.files && req.files.videos && req.files.videos.length > 0) {
       propertyData.videos = req.files.videos.map((file, index) => ({
-        url: `/uploads/videos/${file.filename}`,
+        url: file.path,
         caption: file.originalname,
         order: index
       }));
@@ -1513,17 +1513,17 @@ const createPropertyWithFiles = async (req, res) => {
       if (req.files) {
         console.log('📁 Processing uploaded files:', Object.keys(req.files));
         
-        // Process property images
+        // Process property images (Cloudinary URLs)
         if (req.files.images && Array.isArray(req.files.images)) {
           req.files.images.forEach((file, index) => {
             try {
               images.push({
-                url: `/uploads/images/${file.filename}`,
+                url: file.path,
                 caption: file.originalname,
                 isPrimary: index === 0,
                 order: index
               });
-              console.log(`✅ Processed image ${index + 1}: ${file.filename}`);
+              console.log(`✅ Processed image ${index + 1}: ${file.filename || file.path}`);
             } catch (fileError) {
               console.error(`❌ Error processing image ${index + 1}:`, fileError);
               throw new Error(`Failed to process image file: ${file.originalname}`);
@@ -1531,16 +1531,16 @@ const createPropertyWithFiles = async (req, res) => {
           });
         }
 
-        // Process floor plans
+        // Process floor plans (Cloudinary URLs)
         if (req.files.floorPlans && Array.isArray(req.files.floorPlans)) {
           req.files.floorPlans.forEach((file, index) => {
             try {
               floorPlans.push({
-                url: `/uploads/floorplans/${file.filename}`,
+                url: file.path,
                 caption: file.originalname,
                 order: index
               });
-              console.log(`✅ Processed floor plan ${index + 1}: ${file.filename}`);
+              console.log(`✅ Processed floor plan ${index + 1}: ${file.filename || file.path}`);
             } catch (fileError) {
               console.error(`❌ Error processing floor plan ${index + 1}:`, fileError);
               throw new Error(`Failed to process floor plan file: ${file.originalname}`);
@@ -1548,16 +1548,16 @@ const createPropertyWithFiles = async (req, res) => {
           });
         }
 
-        // Process videos
+        // Process videos (Cloudinary URLs)
         if (req.files.videos && Array.isArray(req.files.videos)) {
           req.files.videos.forEach((file, index) => {
             try {
               videos.push({
-                url: `/uploads/videos/${file.filename}`,
+                url: file.path,
                 caption: file.originalname,
                 order: index
               });
-              console.log(`✅ Processed video ${index + 1}: ${file.filename}`);
+              console.log(`✅ Processed video ${index + 1}: ${file.filename || file.path}`);
             } catch (fileError) {
               console.error(`❌ Error processing video ${index + 1}:`, fileError);
               throw new Error(`Failed to process video file: ${file.originalname}`);

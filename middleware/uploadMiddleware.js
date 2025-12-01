@@ -1,69 +1,43 @@
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { CloudinaryStorage } = require('multer-storage-cloudinary');
+const cloudinary = require('../config/cloudinary');
 
-// Create uploads directory if it doesn't exist with proper error handling
-const uploadsDir = path.join(__dirname, '../uploads');
-try {
-  if (!fs.existsSync(uploadsDir)) {
-    fs.mkdirSync(uploadsDir, { recursive: true });
-    console.log('✅ Created uploads directory:', uploadsDir);
-  }
-  
-  // Test write permissions
-  const testFile = path.join(uploadsDir, 'test-write-permission.tmp');
-  fs.writeFileSync(testFile, 'test');
-  fs.unlinkSync(testFile);
-  console.log('✅ Upload directory has write permissions');
-} catch (error) {
-  console.error('❌ Upload directory setup failed:', error.message);
-  throw new Error(`Upload directory setup failed: ${error.message}`);
-}
+// Configure Cloudinary storage for multer. This replaces the previous
+// diskStorage implementation so files are no longer written to /uploads.
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => {
+    // Default folder in Cloudinary; we keep subfolders per field to
+    // mirror the old filesystem layout while keeping API responses the same.
+    let folder = 'real-estate';
 
-// Configure multer storage with enhanced error handling
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    try {
-      let uploadPath = uploadsDir;
-      
-      // Create subdirectories based on file type
-      if (file.fieldname === 'images') {
-        uploadPath = path.join(uploadsDir, 'images');
-      } else if (file.fieldname === 'floorPlans') {
-        uploadPath = path.join(uploadsDir, 'floorplans');
-      } else if (file.fieldname === 'videos') {
-        uploadPath = path.join(uploadsDir, 'videos');
-      } else if (file.fieldname === 'profileImage') {
-        uploadPath = path.join(uploadsDir, 'agents');
-      }
-      
-      // Create directory if it doesn't exist
-      if (!fs.existsSync(uploadPath)) {
-        fs.mkdirSync(uploadPath, { recursive: true });
-        console.log(`✅ Created directory: ${uploadPath}`);
-      }
-      
-      cb(null, uploadPath);
-    } catch (error) {
-      console.error('❌ Directory creation failed:', error);
-      cb(new Error(`Failed to create upload directory: ${error.message}`), null);
+    if (file.fieldname === 'images') {
+      folder = 'real-estate/properties/images';
+    } else if (file.fieldname === 'floorPlans') {
+      folder = 'real-estate/properties/floorplans';
+    } else if (file.fieldname === 'videos') {
+      folder = 'real-estate/properties/videos';
+    } else if (file.fieldname === 'profileImage') {
+      folder = 'real-estate/agents';
     }
-  },
-  filename: function (req, file, cb) {
-    try {
-      // Generate unique filename with timestamp and random suffix
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const extension = path.extname(file.originalname);
-      const filename = file.fieldname + '-' + uniqueSuffix + extension;
-      cb(null, filename);
-    } catch (error) {
-      console.error('❌ Filename generation failed:', error);
-      cb(new Error(`Failed to generate filename: ${error.message}`), null);
+
+    const isVideo = file.fieldname === 'videos';
+
+    const params = {
+      folder,
+      resource_type: isVideo ? 'video' : 'image'
+    };
+
+    // Restrict standard image uploads to jpg/jpeg/png as requested.
+    if (!isVideo && (file.fieldname === 'images' || file.fieldname === 'profileImage')) {
+      params.allowed_formats = ['jpg', 'jpeg', 'png'];
     }
+
+    return params;
   }
 });
 
-// Enhanced file filter with detailed error messages
+// Enhanced file filter with detailed error messages (unchanged logic)
 const fileFilter = (req, file, cb) => {
   try {
     if (file.fieldname === 'images' || file.fieldname === 'profileImage') {
@@ -98,14 +72,14 @@ const fileFilter = (req, file, cb) => {
 
 // Configure multer with enhanced limits and error handling
 const upload = multer({
-  storage: storage,
-  fileFilter: fileFilter,
+  storage,
+  fileFilter,
   limits: {
     fileSize: 50 * 1024 * 1024, // 50MB limit per file (increased for videos)
     files: 20, // Maximum 20 files total
     fieldSize: 10 * 1024 * 1024 // 10MB for form fields
   },
-  onError: function(err, next) {
+  onError: function (err, next) {
     console.error('❌ Multer error:', err);
     next(err);
   }
@@ -169,4 +143,4 @@ const uploadProfileImage = (req, res, next) => {
   });
 };
 
-module.exports = { uploadFields, uploadsDir, uploadProfileImage };
+module.exports = { uploadFields, uploadProfileImage };

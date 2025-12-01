@@ -395,11 +395,12 @@ const createAgent = async (req, res) => {
       }
     });
 
-    // If a profile image was uploaded, set both avatar and profileImage fields
-    if (req.file && req.file.filename) {
-      const imagePath = `/uploads/agents/${req.file.filename}`;
-      newAgent.avatar = imagePath;
-      newAgent.profileImage = imagePath;
+    // If a profile image was uploaded, set both avatar and profileImage fields.
+    // With Cloudinary storage, `req.file.path` contains the hosted image URL.
+    if (req.file && req.file.path) {
+      const imageUrl = req.file.path;
+      newAgent.avatar = imageUrl;
+      newAgent.profileImage = imageUrl;
     }
 
     await newAgent.save();
