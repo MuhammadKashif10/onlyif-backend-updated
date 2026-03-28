@@ -282,13 +282,13 @@ const updateUserStatus = async (req, res) => {
   }
 };
 
-// @desc    Delete user (updated)
+// @desc    Delete user (hard delete — non-admin only)
 // @route   DELETE /api/admin/users/:id
 // @access  Private (Admin only)
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const user = await User.findById(id);
     if (!user) {
       return res.status(404).json(
@@ -296,23 +296,103 @@ const deleteUser = async (req, res) => {
       );
     }
 
-    // Prevent admin accounts from being deleted
     if (user.role === 'admin') {
       return res.status(403).json(
         errorResponse('Admin accounts cannot be deleted', 403)
       );
     }
 
-    // Soft delete by setting isDeleted flag
-    user.isDeleted = true;
-    user.deletedAt = new Date();
-    user.deletedBy = req.user.id;
-    await user.save();
+    const userId = user._id;
+
+    // 1) Properties owned by this user (full cascade per listing)
+    const ownedProperties = await Property.find({ owner: userId }).select('_id').lean();
+    for (const p of ownedProperties) {
+      await cascadeDeletePropertyData(p._id);
+    }
+
+    // 2) No longer assign this user as agent on others' listings
+    await Property.updateMany(
+      { assignedAgent: userId },
+      { $unset: { assignedAgent: 1 } }
+    );
+
+    // 3) Message threads + messages where this user participated
+    const Message = require('../models/Message');
+    const MessageThread = require('../models/MessageThread');
+    const threadIds = await MessageThread.find({
+      'participants.user': userId,
+    }).distinct('_id');
+    if (threadIds.length) {
+      await Message.deleteMany({ thread: { $in: threadIds } });
+      await MessageThread.deleteMany({ _id: { $in: threadIds } });
+    }
+
+    const CashOffer = require('../models/CashOffer');
+    const BuyerNotification = require('../models/BuyerNotification');
+    const Notification = require('../models/Notification');
+    const Purchase = require('../models/Purchase');
+    const Transaction = require('../models/Transaction');
+    const Inspection = require('../models/Inspection');
+    const Addon = require('../models/Addon');
+    const Invoice = require('../models/Invoice');
+    const PaymentRecord = require('../models/PaymentRecord');
+    const TermsAcceptance = require('../models/TermsAcceptance');
+    const SavedSearch = require('../models/SavedSearch');
+    const BuyerProfile = require('../models/BuyerProfile');
+    const Chat = require('../models/Chat');
+    const PropertyStatusHistory = require('../models/PropertyStatusHistory');
+
+    await Promise.all([
+      BuyerProfile.deleteMany({ userId: userId }),
+      BuyerNotification.deleteMany({ userId: userId }),
+      Notification.deleteMany({
+        $or: [
+          { user: userId },
+          { seller: userId },
+          { agent: userId },
+        ],
+      }),
+      Purchase.deleteMany({ user: userId }),
+      Transaction.deleteMany({ user: userId }),
+      SavedSearch.deleteMany({ user: userId }),
+      TermsAcceptance.deleteMany({ user: userId }),
+      CashOffer.deleteMany({ submittedBy: userId }),
+      Inspection.deleteMany({
+        $or: [
+          { agent: userId },
+          { buyer: userId },
+          { seller: userId },
+        ],
+      }),
+      Addon.deleteMany({ purchasedBy: userId }),
+      Invoice.deleteMany({
+        $or: [
+          { agent: userId },
+          { seller: userId },
+          { buyer: userId },
+        ],
+      }),
+      PaymentRecord.deleteMany({
+        $or: [{ seller: userId }, { agent: userId }],
+      }),
+      Chat.deleteMany({
+        $or: [{ sender: userId }, { receiver: userId }],
+      }),
+      PropertyStatusHistory.deleteMany({ changedBy: userId }),
+    ]);
+
+    // Dangling refs on other users (e.g. suspension audit)
+    await User.updateMany(
+      { suspendedBy: userId },
+      { $unset: { suspendedBy: 1 } }
+    );
+
+    await User.findByIdAndDelete(userId);
 
     res.json(
       successResponse(
-        { message: 'User deleted successfully' },
-        'User deleted successfully'
+        { message: 'User deleted permanently' },
+        'User and related data deleted successfully'
       )
     );
   } catch (error) {
@@ -322,6 +402,50 @@ const deleteUser = async (req, res) => {
     );
   }
 };
+
+/**
+ * Hard-delete a single property and all related DB records (reused by admin property delete & user delete).
+ */
+async function cascadeDeletePropertyData(propertyId) {
+  const id = propertyId.toString();
+
+  const CashOffer = require('../models/CashOffer');
+  const MessageThread = require('../models/MessageThread');
+  const BuyerNotification = require('../models/BuyerNotification');
+  const Notification = require('../models/Notification');
+  const Purchase = require('../models/Purchase');
+  const Transaction = require('../models/Transaction');
+  const Inspection = require('../models/Inspection');
+  const Addon = require('../models/Addon');
+  const Invoice = require('../models/Invoice');
+  const UserModel = require('../models/User');
+  const BuyerProfile = require('../models/BuyerProfile');
+  const PropertyStatusHistory = require('../models/PropertyStatusHistory');
+
+  await Promise.all([
+    CashOffer.deleteMany({ property: id }),
+    MessageThread.deleteMany({
+      $or: [{ property: id }, { 'context.property': id }],
+    }),
+    BuyerNotification.deleteMany({
+      $or: [{ property: id }, { 'data.propertyId': id }],
+    }),
+    Notification.deleteMany({ property: id }),
+    Purchase.deleteMany({ property: id }),
+    Transaction.deleteMany({ property: id }),
+    Inspection.deleteMany({ property: id }),
+    Addon.deleteMany({ property: id }),
+    Invoice.deleteMany({ property: id }),
+    PropertyStatusHistory.deleteMany({ property: id }),
+    UserModel.updateMany({ favorites: id }, { $pull: { favorites: id } }),
+    BuyerProfile.updateMany(
+      { favoriteProperties: id },
+      { $pull: { favoriteProperties: id } }
+    ),
+  ]);
+
+  await Property.findByIdAndDelete(id);
+}
 
 // @desc    Reset property assignments
 // @route   POST /api/admin/assignments/reset
@@ -357,7 +481,7 @@ const resetAssignments = async (req, res) => {
 const deleteProperty = async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const property = await Property.findById(id);
     if (!property) {
       return res.status(404).json(
@@ -365,59 +489,7 @@ const deleteProperty = async (req, res) => {
       );
     }
 
-    // Import required models for cascading deletes
-    const CashOffer = require('../models/CashOffer');
-    const MessageThread = require('../models/MessageThread');
-    const BuyerNotification = require('../models/BuyerNotification');
-    const Notification = require('../models/Notification');
-    const Purchase = require('../models/Purchase');
-    const Transaction = require('../models/Transaction');
-    const Inspection = require('../models/Inspection');
-    const Addon = require('../models/Addon');
-    const User = require('../models/User');
-    const BuyerProfile = require('../models/BuyerProfile');
-
-    // Perform cascading deletes for all related documents
-    await Promise.all([
-      // Delete cash offers for this property
-      CashOffer.deleteMany({ property: id }),
-      
-      // Delete message threads related to this property
-      MessageThread.deleteMany({ property: id }),
-      
-      // Delete buyer notifications for this property
-      BuyerNotification.deleteMany({ property: id }),
-      
-      // Delete notifications related to this property
-      Notification.deleteMany({ property: id }),
-      
-      // Delete purchases for this property
-      Purchase.deleteMany({ property: id }),
-      
-      // Delete transactions for this property
-      Transaction.deleteMany({ property: id }),
-      
-      // Delete inspections for this property
-      Inspection.deleteMany({ property: id }),
-      
-      // Delete addons for this property
-      Addon.deleteMany({ property: id }),
-      
-      // Remove property from user favorites
-      User.updateMany(
-        { 'favorites': id },
-        { $pull: { favorites: id } }
-      ),
-      
-      // Remove property from buyer profiles
-      BuyerProfile.updateMany(
-        { 'favoriteProperties': id },
-        { $pull: { favoriteProperties: id } }
-      )
-    ]);
-
-    // Finally, delete the property itself (hard delete)
-    await Property.findByIdAndDelete(id);
+    await cascadeDeletePropertyData(id);
 
     res.json(
       successResponse(null, 'Property and all related data deleted successfully')

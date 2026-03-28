@@ -131,6 +131,13 @@ const login = async (req, res) => {
       );
     }
 
+    // Block accounts removed by admin (soft delete)
+    if (user.isDeleted) {
+      return res.status(403).json(
+        errorResponse('This account is no longer available.', 403)
+      );
+    }
+
     // Check if user is suspended
     if (user.isSuspended) {
       return res.status(403).json(
