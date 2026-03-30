@@ -51,12 +51,21 @@ const app = express();
 
 // ------------------ CORS Setup ------------------
 
-// Allowed frontend origins
-const allowedOrigins = [
-  'http://localhost:3010', // local dev
-  'https://onlyif.vercel.app', // replace with your deployed frontend
-  'https://onlyif.com.au'
+// Allowed frontend origins (env-driven + safe defaults)
+const defaultAllowedOrigins = [
+  'http://localhost:3010',
+  'http://localhost:3000',
+  'https://onlyif.vercel.app',
+  'https://onlyif.com.au',
+  'https://www.onlyif.com.au',
 ];
+
+const envAllowedOrigins = (process.env.CORS_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const allowedOrigins = Array.from(new Set([...defaultAllowedOrigins, ...envAllowedOrigins]));
 
 // CORS middleware
 app.use(cors({
@@ -75,8 +84,14 @@ app.use(cors({
 
 // Preflight requests for all routes
 app.options('*', cors({
-  origin: allowedOrigins,
-  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  origin: function(origin, callback) {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET','POST','PUT','DELETE','PATCH','OPTIONS'],
   credentials: true
 }));
 

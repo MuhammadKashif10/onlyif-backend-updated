@@ -18,6 +18,7 @@ module.exports = {
 
   // Frontend / CORS
   FRONTEND_URL: process.env.FRONTEND_URL,
+  CORS_ORIGINS: process.env.CORS_ORIGINS,
 
   // Stripe
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY,
