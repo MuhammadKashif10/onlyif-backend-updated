@@ -52,9 +52,9 @@ const register = async (req, res) => {
     // Combine firstName and lastName into name
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
     
-    // Only allow buyer and seller roles for public registration
-    const userRole = role || 'buyer';
-    if (!['buyer', 'seller'].includes(userRole)) {
+    // Only allow buyer and seller roles for public registration (or no role yet)
+    const userRole = role ?? null;
+    if (userRole !== null && !['buyer', 'seller'].includes(userRole)) {
       return res.status(403).json(
         errorResponse('Only buyer and seller accounts can be created through public registration', 403)
       );
@@ -109,6 +109,52 @@ const register = async (req, res) => {
     
     res.status(500).json(
       errorResponse('Server error during registration', 500)
+    );
+  }
+};
+
+const acceptRole = async (req, res) => {
+  try {
+    const { role, checkboxesAccepted } = req.body;
+
+    if (!checkboxesAccepted) {
+      return res.status(400).json(
+        errorResponse('All required checkboxes must be accepted', 400)
+      );
+    }
+
+    if (!role || !['buyer', 'seller'].includes(role)) {
+      return res.status(400).json(
+        errorResponse('Role must be buyer or seller', 400)
+      );
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json(
+        errorResponse('User not found', 404)
+      );
+    }
+
+    if (user.role) {
+      return res.status(409).json(
+        errorResponse('Role already assigned', 409)
+      );
+    }
+
+    user.role = role;
+    await user.save();
+
+    res.json(
+      successResponse(
+        user,
+        'Role accepted successfully'
+      )
+    );
+  } catch (error) {
+    console.error('Accept role error:', error);
+    res.status(500).json(
+      errorResponse('Server error while accepting role', 500)
     );
   }
 };
@@ -447,5 +493,6 @@ module.exports = {
   changePassword,
   sendOtp,
   verifyOtp,
-  adminLogin
+  adminLogin,
+  acceptRole
 };

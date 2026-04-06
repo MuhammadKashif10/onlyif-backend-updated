@@ -8,6 +8,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 const {
   register,
   login,
+  acceptRole,
   getMe,
   changePassword,
   adminLogin,
@@ -18,6 +19,11 @@ const {
 // Public routes with rate limiting and validation
 router.post('/register', authLimiter, validateRegister, asyncHandler(register));
 router.post('/login', authLimiter, validateLogin, asyncHandler(login));
+
+router.post('/accept-role', authMiddleware, [
+  body('role').isIn(['buyer', 'seller']).withMessage('Role must be buyer or seller'),
+  body('checkboxesAccepted').isBoolean().withMessage('checkboxesAccepted must be boolean'),
+], asyncHandler(acceptRole));
 
 // OTP routes
 router.post('/send-otp', [

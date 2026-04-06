@@ -35,8 +35,14 @@ const userSchema = new mongoose.Schema({
 
   role: {
     type: String,
-    enum: ['seller', 'buyer', 'agent', 'admin'],
-    default: 'buyer'
+    default: null,
+    validate: {
+      validator: function(value) {
+        if (value === null || value === undefined) return true;
+        return ['seller', 'buyer', 'agent', 'admin'].includes(value);
+      },
+      message: 'Role must be seller, buyer, agent, admin, or null'
+    }
   },
 
   // 🏦 NEW FIELD — Bank Account Number for Agent
