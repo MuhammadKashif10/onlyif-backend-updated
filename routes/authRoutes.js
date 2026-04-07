@@ -13,7 +13,9 @@ const {
   changePassword,
   adminLogin,
   sendOtp,
-  verifyOtp
+  verifyOtp,
+  forgotPassword,
+  resetPassword
 } = require('../controllers/authController');
 
 // Public routes with rate limiting and validation
@@ -38,6 +40,10 @@ router.post('/verify-otp', [
   body('phone').optional().isMobilePhone(),
   body('otp').isLength({ min: 6, max: 6 }).isNumeric()
 ], asyncHandler(verifyOtp));
+
+// Forgot & Reset Password
+router.post('/forgot-password', authLimiter, asyncHandler(forgotPassword));
+router.post('/reset-password', authLimiter, asyncHandler(resetPassword));
 
 // Protected routes
 router.get('/me', authMiddleware, asyncHandler(getMe));

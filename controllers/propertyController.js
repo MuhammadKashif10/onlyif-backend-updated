@@ -481,7 +481,7 @@ const createProperty = async (req, res) => {
         email: contactEmail || req.user.email,
         phone: contactPhone || ''
       },
-      status: 'active',
+      status: 'pending',
       yearBuilt: yearBuilt ? parseInt(yearBuilt) : undefined,
       lotSize: lotSize ? parseFloat(lotSize) : undefined
     };
@@ -1761,6 +1761,26 @@ const approveProperty = async (req, res) => {
     property.status = 'active';
     await property.save();
 
+    // Notify seller about approval
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        user: property.owner,
+        type: 'property_update',
+        category: 'success',
+        title: 'Property Approved!',
+        body: `Your property "${property.title}" has been approved and is now live!`,
+        property: property._id,
+        meta: {
+          propertyId: property._id,
+          action: 'approval'
+        }
+      });
+      console.log(`🔔 Notified seller ${property.owner} about property approval: ${property.title}`);
+    } catch (notificationError) {
+      console.error('Error sending seller approval notification:', notificationError);
+    }
+
     // Notify all buyers about the new property being available
     try {
       await notifyBuyersAboutNewProperty(property);
@@ -1814,6 +1834,26 @@ const rejectProperty = async (req, res) => {
     // Update status to rejected
     property.status = 'rejected';
     await property.save();
+
+    // Notify seller about rejection
+    try {
+      const Notification = require('../models/Notification');
+      await Notification.create({
+        user: property.owner,
+        type: 'property_update',
+        category: 'warning',
+        title: 'Property Submission Update',
+        body: `Your property submission for "${property.title}" was not approved. Please review and resubmit.`,
+        property: property._id,
+        meta: {
+          propertyId: property._id,
+          action: 'rejection'
+        }
+      });
+      console.log(`🔔 Notified seller ${property.owner} about property rejection: ${property.title}`);
+    } catch (notificationError) {
+      console.error('Error sending seller rejection notification:', notificationError);
+    }
 
     res.json(
       successResponse(

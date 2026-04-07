@@ -2,6 +2,7 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { successResponse, errorResponse } = require('../utils/responseFormatter');
+const emailService = require('../services/emailService');
 
 // Generate JWT Token
 // function generateToken()
@@ -486,6 +487,132 @@ const adminLogin = async (req, res) => {
   }
 };
 
+// @desc    Forgot password
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json(
+        errorResponse('Email address is required', 400)
+      );
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json(
+        errorResponse('No account found with this email address', 404)
+      );
+    }
+
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    // Store OTP in user document
+    user.otp = otp;
+    user.otpExpiry = otpExpiry;
+    await user.save();
+
+    // Log OTP for development/testing
+    console.log(`-----------------------------------------`);
+    console.log(`PASSWORD RESET OTP for ${email}: ${otp}`);
+    console.log(`-----------------------------------------`);
+
+    // Send OTP via Email
+    const emailSubject = 'Password Reset Code';
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <h2 style="color: #10b981;">Password Reset Code</h2>
+        <p>Hello ${user.firstName || user.name},</p>
+        <p>We received a request to reset your password. Use the code below to complete the process:</p>
+        <div style="background: #f3f4f6; padding: 15px; font-size: 24px; font-weight: bold; text-align: center; border-radius: 8px; margin: 20px 0;">
+          ${otp}
+        </div>
+        <p>This code will expire in 15 minutes. If you did not request this, please ignore this email.</p>
+        <p>Best regards,<br>OnlyIf Team</p>
+      </div>
+    `;
+
+    await emailService.sendEmail(email, emailSubject, emailHtml);
+
+    res.json(
+      successResponse(
+        { message: 'A password reset code has been sent to your email.' },
+        'Password reset code sent successfully'
+      )
+    );
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json(
+      errorResponse('Server error during forgot password', 500)
+    );
+  }
+};
+
+// @desc    Reset password
+// @route   POST /api/auth/reset-password
+// @access  Public
+const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json(
+        errorResponse('Email, OTP, and new password are required', 400)
+      );
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json(
+        errorResponse('New password must be at least 8 characters long', 400)
+      );
+    }
+
+    // Find user by email and explicitly select OTP fields
+    const user = await User.findOne({ email }).select('+otp +otpExpiry');
+    if (!user) {
+      return res.status(404).json(
+        errorResponse('User not found', 404)
+      );
+    }
+
+    // Verify OTP matches and is not expired
+    if (user.otp !== otp) {
+      return res.status(400).json(
+        errorResponse('Invalid reset code', 400)
+      );
+    }
+
+    if (user.otpExpiry < new Date()) {
+      return res.status(400).json(
+        errorResponse('Reset code has expired', 400)
+      );
+    }
+
+    // Update password and clear OTP fields
+    user.password = newPassword; // Pre-save middleware will hash it
+    user.otp = undefined;
+    user.otpExpiry = undefined;
+    await user.save();
+
+    res.json(
+      successResponse(
+        { message: 'Password reset successful.' },
+        'Password has been reset successfully'
+      )
+    );
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json(
+      errorResponse('Server error during password reset', 500)
+    );
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -494,5 +621,7 @@ module.exports = {
   sendOtp,
   verifyOtp,
   adminLogin,
-  acceptRole
+  acceptRole,
+  forgotPassword,
+  resetPassword
 };
