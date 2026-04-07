@@ -42,6 +42,7 @@ const agentRoutes = require('./routes/agentRoutes');
 const agentsRoutes = require('./routes/agentsRoutes');
 const paymentRecordRoutes = require('./routes/paymentRecordRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
+const userRoutes = require('./routes/userRoutes');
 const socketConnection = require('./config/socketConnection');
 
 // Connect to DB
@@ -177,6 +178,7 @@ app.use('/api/testimonials', testimonialRoutes);
 app.use('/api/buyer', buyerRoutes);
 app.use('/api/agent', agentRoutes);
 app.use('/api/agents', agentsRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/admin/payment-records', paymentRecordRoutes);
 app.use('/api/cash-offers', require('./routes/cashOfferRoutes'));
 app.use('/api/settings', settingsRoutes);

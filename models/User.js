@@ -45,6 +45,12 @@ const userSchema = new mongoose.Schema({
     }
   },
 
+  agentStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'rejected', null],
+    default: null
+  },
+
   // 🏦 NEW FIELD — Bank Account Number for Agent
   bankAccountNumber: {
     type: String,
@@ -72,18 +78,18 @@ const userSchema = new mongoose.Schema({
   agentProfile: {
     phone: {
       type: String,
-      required: function() { return this.role === 'agent'; },
+      required: false,
       trim: true,
       match: [/^(\+?[1-9]\d{8,14}|0[2-4789]\d{8})$/, 'Please provide a valid phone (AU: 04XX XXX XXX or 02XXXXXXXX, International: +61...)']
     },
     brokerage: {
       type: String,
-      required: function() { return this.role === 'agent'; },
+      required: false,
       trim: true
     },
     yearsOfExperience: {
       type: Number,
-      required: function() { return this.role === 'agent'; },
+      required: false,
       min: [0, 'Years of experience cannot be negative'],
       max: [50, 'Years of experience cannot exceed 50']
     },

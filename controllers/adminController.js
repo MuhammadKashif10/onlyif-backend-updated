@@ -2,6 +2,7 @@ const User = require('../models/User');
 const Property = require('../models/Property');
 const bcrypt = require('bcryptjs');
 const { successResponse, errorResponse, paginationMeta } = require('../utils/responseFormatter');
+const emailService = require('../services/emailService');
 
 // @desc    Get dashboard statistics
 // @route   GET /api/admin/dashboard/stats
@@ -593,6 +594,101 @@ const getUserStats = async (req, res) => {
   }
 };
 
+// @desc    Get pending agent requests
+// @route   GET /api/admin/agent-requests
+// @access  Private (Admin only)
+const getAgentRequests = async (req, res) => {
+  try {
+    const pendingAgents = await User.find({
+      role: 'agent',
+      agentStatus: 'pending',
+      isDeleted: false
+    })
+      .select('name email phone createdAt agentStatus')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.json(
+      successResponse(
+        pendingAgents,
+        'Pending agent requests retrieved successfully'
+      )
+    );
+  } catch (error) {
+    console.error('Error fetching agent requests:', error);
+    return res.status(500).json(errorResponse('Server error while fetching agent requests', 500));
+  }
+};
+
+// @desc    Approve or reject an agent request
+// @route   PUT /api/admin/agent-status/:userId
+// @access  Private (Admin only)
+const updateAgentRequestStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { status } = req.body;
+
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json(errorResponse('Status must be approved or rejected', 400));
+    }
+
+    const agent = await User.findOne({
+      _id: userId,
+      role: 'agent',
+      isDeleted: false
+    });
+
+    if (!agent) {
+      return res.status(404).json(errorResponse('Agent request not found', 404));
+    }
+
+    agent.agentStatus = status;
+    if (status === 'approved') {
+      agent.isActive = true;
+      agent.isSuspended = false;
+      agent.suspendedAt = null;
+      agent.suspendedBy = null;
+      agent.suspensionReason = null;
+    } else {
+      agent.isActive = true;
+      agent.isSuspended = false;
+    }
+    await agent.save();
+
+    if (agent.email) {
+      const subject = status === 'approved'
+        ? 'Your Agent Account Has Been Approved'
+        : 'Your Agent Request Has Been Rejected';
+      const html = status === 'approved'
+        ? `
+          <p>Congratulations! Your agent account has been approved.</p>
+          <p>You can now access your dashboard.</p>
+        `
+        : `
+          <p>Sorry, your agent request has been rejected.</p>
+          <p>Please contact support for more details.</p>
+        `;
+      await emailService.sendEmail(agent.email, subject, html);
+    }
+
+    return res.json(
+      successResponse(
+        {
+          id: agent._id,
+          name: agent.name,
+          email: agent.email,
+          role: agent.role,
+          agentStatus: agent.agentStatus
+        },
+        `Agent request ${status} successfully`
+      )
+    );
+  } catch (error) {
+    console.error('Error updating agent request status:', error);
+    return res.status(500).json(errorResponse('Server error while updating agent request status', 500));
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getAllUsers,
@@ -603,5 +699,7 @@ module.exports = {
   deleteProperty,
   resetAssignments,
   getTermsLogs,
-  getUserStats
+  getUserStats,
+  getAgentRequests,
+  updateAgentRequestStatus
 };

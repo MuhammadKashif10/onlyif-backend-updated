@@ -12,7 +12,9 @@ const {
   resetAssignments,
   getTermsLogs,
   changeAdminPassword,
-  getUserStats
+  getUserStats,
+  getAgentRequests,
+  updateAgentRequestStatus
 } = require('../controllers/adminController');
 const Property = require('../models/Property');
 const User = require('../models/User');
@@ -43,6 +45,8 @@ router.put('/settings', asyncHandler(async (req, res) => {
 
 router.get('/users', asyncHandler(getAllUsers));
 router.get('/users/stats', asyncHandler(getUserStats));
+router.get('/agent-requests', asyncHandler(getAgentRequests));
+router.put('/agent-status/:userId', asyncHandler(updateAgentRequestStatus));
 router.patch('/users/:id/suspend', asyncHandler(toggleUserSuspension));
 router.patch('/users/:id/status', asyncHandler(updateUserStatus));
 router.delete('/users/:id', asyncHandler(deleteUser));
