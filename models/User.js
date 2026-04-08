@@ -45,6 +45,23 @@ const userSchema = new mongoose.Schema({
     }
   },
 
+  roles: {
+    type: [String],
+    default: [],
+    validate: {
+      validator: function(v) {
+        return v.every(role => ['seller', 'buyer', 'agent', 'admin'].includes(role));
+      },
+      message: 'Roles must be seller, buyer, agent, or admin'
+    }
+  },
+
+  acceptedRoles: {
+    buyer: { type: Boolean, default: false },
+    seller: { type: Boolean, default: false },
+    agent: { type: Boolean, default: false }
+  },
+
   agentStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected', null],

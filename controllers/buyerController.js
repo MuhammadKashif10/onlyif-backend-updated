@@ -23,7 +23,8 @@ const unlockProperty = async (req, res) => {
   }
 
   // Check if user is a buyer
-  if (req.user.role !== 'buyer') {
+  const hasBuyerRole = req.user.role === 'buyer' || (req.user.roles && req.user.roles.includes('buyer'));
+  if (!hasBuyerRole) {
     return res.status(403).json(
       errorResponse('Only buyers can unlock properties', 403)
     );

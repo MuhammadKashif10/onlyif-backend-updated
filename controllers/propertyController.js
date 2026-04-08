@@ -431,7 +431,8 @@ const createFailedInvoiceNotification = async (property, agent, error) => {
 const createProperty = async (req, res) => {
   try {
     // Only sellers can create properties
-    if (req.user.role !== 'seller') {
+    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    if (!hasSellerRole) {
       return res.status(403).json(
         errorResponse('Only sellers can create property listings', 403)
       );
@@ -580,10 +581,10 @@ const getApproximateAddress = (addr) => {
 };
 
 // Helper: Check if viewer should see full address (owner, agent, admin, or unlocked buyer)
-const shouldShowFullAddress = async (propertyId, userId, userRole) => {
+const shouldShowFullAddress = async (propertyId, userId, userRole, roles = []) => {
   if (!userId) return false;
-  if (['seller', 'agent', 'admin'].includes(userRole)) return true;
-  if (userRole !== 'buyer') return false;
+  if (['seller', 'agent', 'admin'].includes(userRole) || (roles && roles.some(r => ['seller', 'agent', 'admin'].includes(r)))) return true;
+  if (userRole !== 'buyer' && (!roles || !roles.includes('buyer'))) return false;
   const Transaction = require('../models/Transaction');
   const txUnlock = await Transaction.findOne({
     user: userId,
@@ -640,7 +641,7 @@ const getPropertyById = async (req, res) => {
     const propertyObj = property.toObject();
     
     // Show full address only to owner, agent, admin, or buyers who unlocked
-    const showFull = req.user && await shouldShowFullAddress(property._id, req.user.id, req.user.role);
+    const showFull = req.user && await shouldShowFullAddress(property._id, req.user.id, req.user.role, req.user.roles);
     const addressString = showFull
       ? (propertyObj.address && typeof propertyObj.address === 'object' 
           ? `${propertyObj.address.street}, ${propertyObj.address.city}, ${propertyObj.address.state} ${propertyObj.address.zipCode}`
@@ -1136,7 +1137,8 @@ const getPropertyStats = async (req, res) => {
 // @route   GET /api/seller/properties
 // @access  Private (Seller only)
 const getSellerProperties = async (req, res) => {
-  if (req.user.role !== 'seller') {
+  const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+  if (!hasSellerRole) {
     return res.status(403).json(
       errorResponse('Only sellers can access this endpoint', 403)
     );

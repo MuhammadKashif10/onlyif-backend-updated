@@ -11,7 +11,8 @@ const { successResponse, errorResponse } = require('../utils/responseFormatter')
  */
 const getSellerInvoices = async (req, res) => {
   try {
-    if (req.user.role !== 'seller') {
+    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    if (!hasSellerRole) {
       return res.status(403).json(
         errorResponse('Access denied. Seller role required.', 403)
       );
@@ -85,7 +86,8 @@ const getSellerInvoices = async (req, res) => {
  */
 const getSellerInvoiceDetails = async (req, res) => {
   try {
-    if (req.user.role !== 'seller') {
+    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    if (!hasSellerRole) {
       return res.status(403).json(
         errorResponse('Access denied. Seller role required.', 403)
       );

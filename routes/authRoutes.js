@@ -15,7 +15,8 @@ const {
   sendOtp,
   verifyOtp,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  addRole
 } = require('../controllers/authController');
 
 // Public routes with rate limiting and validation
@@ -26,6 +27,10 @@ router.post('/accept-role', authMiddleware, [
   body('role').isIn(['buyer', 'seller']).withMessage('Role must be buyer or seller'),
   body('checkboxesAccepted').isBoolean().withMessage('checkboxesAccepted must be boolean'),
 ], asyncHandler(acceptRole));
+
+router.post('/add-role', authMiddleware, [
+  body('role').isIn(['buyer', 'seller']).withMessage('Role must be buyer or seller'),
+], asyncHandler(addRole));
 
 // OTP routes
 router.post('/send-otp', [

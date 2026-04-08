@@ -613,6 +613,66 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// @desc    Add a role to existing user
+// @route   POST /api/auth/add-role
+// @access  Private
+const addRole = async (req, res) => {
+  try {
+    const { role } = req.body;
+    const userId = req.user.id;
+
+    if (!role || !['buyer', 'seller'].includes(role)) {
+      return res.status(400).json(
+        errorResponse('Valid role (buyer or seller) is required', 400)
+      );
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json(
+        errorResponse('User not found', 404)
+      );
+    }
+
+    // Add role to roles array if not already present
+    if (!user.roles.includes(role)) {
+      user.roles.push(role);
+    }
+
+    // Also update legacy role field if it's currently null
+    if (!user.role) {
+      user.role = role;
+    }
+
+    // Mark as accepted
+    if (!user.acceptedRoles) {
+      user.acceptedRoles = { buyer: false, seller: false, agent: false };
+    }
+    user.acceptedRoles[role] = true;
+
+    await user.save();
+
+    res.json(
+      successResponse(
+        {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          roles: user.roles,
+          acceptedRoles: user.acceptedRoles
+        },
+        `Role ${role} added successfully`
+      )
+    );
+  } catch (error) {
+    console.error('Add role error:', error);
+    res.status(500).json(
+      errorResponse('Server error adding role', 500)
+    );
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -623,5 +683,6 @@ module.exports = {
   adminLogin,
   acceptRole,
   forgotPassword,
-  resetPassword
+  resetPassword,
+  addRole
 };

@@ -15,8 +15,10 @@ const getSellerOverview = async (req, res) => {
     const sellerId = req.params.id;
     
     // Verify the seller can only access their own data
-    // Convert both IDs to strings for proper comparison
-    if (req.user.role !== 'seller' || req.user.id.toString() !== sellerId) {
+    // Check both legacy role field and new roles array for backward compatibility
+    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    
+    if (!hasSellerRole || req.user.id.toString() !== sellerId) {
       return res.status(403).json(
         errorResponse('Access denied. You can only view your own overview.', 403)
       );
@@ -121,7 +123,9 @@ const getSellerListings = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'seller' || req.user.id.toString() !== sellerId) {
+    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    
+    if (!hasSellerRole || req.user.id.toString() !== sellerId) {
       return res.status(403).json({
         success: false,
         message: 'Access denied. You can only view your own listings.',
@@ -225,7 +229,9 @@ const getSellerAnalytics = async (req, res) => {
     const timeRange = req.query.timeRange || '6months';
     
     // Verify the seller can only access their own data
-    if (req.user.role !== 'seller' || req.user.id !== sellerId) {
+    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    
+    if (!hasSellerRole || req.user.id.toString() !== sellerId) {
       return res.status(403).json(
         errorResponse('Access denied. You can only view your own analytics.', 403)
       );
