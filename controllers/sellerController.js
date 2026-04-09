@@ -16,7 +16,7 @@ const getSellerOverview = async (req, res) => {
     
     // Verify the seller can only access their own data
     // Check both legacy role field and new roles array for backward compatibility
-    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    const hasSellerRole = req.user.roles?.includes('seller') || req.user.role === 'seller';
     
     if (!hasSellerRole || req.user.id.toString() !== sellerId) {
       return res.status(403).json(
@@ -123,7 +123,7 @@ const getSellerListings = async (req, res) => {
       });
     }
 
-    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    const hasSellerRole = req.user.roles?.includes('seller') || req.user.role === 'seller';
     
     if (!hasSellerRole || req.user.id.toString() !== sellerId) {
       return res.status(403).json({
@@ -229,7 +229,7 @@ const getSellerAnalytics = async (req, res) => {
     const timeRange = req.query.timeRange || '6months';
     
     // Verify the seller can only access their own data
-    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    const hasSellerRole = req.user.roles?.includes('seller') || req.user.role === 'seller';
     
     if (!hasSellerRole || req.user.id.toString() !== sellerId) {
       return res.status(403).json(

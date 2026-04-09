@@ -431,10 +431,10 @@ const createFailedInvoiceNotification = async (property, agent, error) => {
 const createProperty = async (req, res) => {
   try {
     // Only sellers can create properties
-    const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+    const hasSellerRole = req.user.roles?.includes('seller') || req.user.role === 'seller';
     if (!hasSellerRole) {
       return res.status(403).json(
-        errorResponse('Only sellers can create property listings', 403)
+        errorResponse('Only sellers can create property listings.', 403)
       );
     }
 
@@ -672,6 +672,7 @@ const getPropertyById = async (req, res) => {
     
     const normalizedProperty = {
       id: propertyObj._id.toString(),
+      _id: propertyObj._id.toString(),
       title: propertyObj.title || '',
       address: addressString,
       approximateAddress: !showFull ? addressString : null,
@@ -735,13 +736,14 @@ const updateProperty = async (req, res) => {
   }
 
   // Check permissions
-  const canEdit = (
+  const hasEditPermission = (
     req.user.id === property.owner.toString() ||
     req.user.role === 'admin' ||
+    (req.user.roles && req.user.roles.includes('admin')) ||
     (property.assignedAgent && req.user.id === property.assignedAgent.toString())
   );
 
-  if (!canEdit) {
+  if (!hasEditPermission) {
     return res.status(403).json(
       errorResponse('Not authorized to edit this property', 403)
     );
@@ -797,12 +799,13 @@ const deleteProperty = async (req, res) => {
   }
 
   // Only owner or admin can delete
-  const canDelete = (
+  const hasDeletePermission = (
     req.user.id === property.owner.toString() ||
-    req.user.role === 'admin'
+    req.user.role === 'admin' ||
+    (req.user.roles && req.user.roles.includes('admin'))
   );
 
-  if (!canDelete) {
+  if (!hasDeletePermission) {
     return res.status(403).json(
       errorResponse('Not authorized to delete this property', 403)
     );
@@ -829,7 +832,8 @@ const assignAgent = async (req, res) => {
   }
 
   // Only property owner can assign agent
-  if (req.user.id !== property.owner.toString()) {
+  const isOwner = req.user.id === property.owner.toString();
+  if (!isOwner) {
     return res.status(403).json(
       errorResponse('Only property owner can assign agent', 403)
     );
@@ -837,7 +841,8 @@ const assignAgent = async (req, res) => {
 
   // Verify agent exists and has correct role
   const agent = await User.findById(agentId);
-  if (!agent || agent.role !== 'agent') {
+  const isAgent = agent && (agent.role === 'agent' || (agent.roles && agent.roles.includes('agent')));
+  if (!isAgent) {
     return res.status(400).json(
       errorResponse('Invalid agent ID', 400)
     );
@@ -1052,6 +1057,7 @@ const getAllProperties = async (req, res) => {
     // Return normalized flat structure
     return {
       id: propertyObj._id.toString(), // Convert MongoDB _id to string id
+      _id: propertyObj._id.toString(), // Include stringified _id for frontend compatibility
       title: propertyObj.title || '',
       address: addressString, // Flat string address
       city: propertyObj.address?.city || '',
@@ -1137,10 +1143,10 @@ const getPropertyStats = async (req, res) => {
 // @route   GET /api/seller/properties
 // @access  Private (Seller only)
 const getSellerProperties = async (req, res) => {
-  const hasSellerRole = req.user.role === 'seller' || (req.user.roles && req.user.roles.includes('seller'));
+  const hasSellerRole = req.user.roles?.includes('seller') || req.user.role === 'seller';
   if (!hasSellerRole) {
     return res.status(403).json(
-      errorResponse('Only sellers can access this endpoint', 403)
+      errorResponse('Only sellers can access this endpoint.', 403)
     );
   }
 
@@ -1209,6 +1215,7 @@ const submitPropertyPublic = async (req, res) => {
         phone: contactPhone,
         password: tempPassword, // Add temporary password
         role: 'seller',
+        roles: ['seller'], // Ensure roles array is initialized
         isVerified: false
       });
       await user.save();
@@ -1414,7 +1421,8 @@ const createPropertyWithFiles = async (req, res) => {
       });
     }
 
-    if (req.user.role !== 'seller') {
+    const hasSellerRole = req.user.roles?.includes('seller') || req.user.role === 'seller';
+    if (!hasSellerRole) {
       return res.status(403).json({
         success: false,
         error: 'Access denied',

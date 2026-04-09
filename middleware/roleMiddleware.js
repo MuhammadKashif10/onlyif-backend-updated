@@ -14,11 +14,14 @@ const allowRoles = (...allowedRoles) => {
       );
     }
 
-    // Check if user's role is in the allowed roles
-    if (!allowedRoles.includes(req.user.role)) {
+    // Check if user's role or roles array is in the allowed roles
+    const hasAllowedRole = allowedRoles.includes(req.user.role) || 
+                          (req.user.roles && req.user.roles.some(r => allowedRoles.includes(r)));
+
+    if (!hasAllowedRole) {
       return res.status(403).json(
         errorResponse(
-          `Access denied. Required role: ${allowedRoles.join(' or ')}. Your role: ${req.user.role}`,
+          `Access denied. Required role: ${allowedRoles.join(' or ')}. Your role: ${req.user.role || (req.user.roles ? req.user.roles.join(', ') : 'none')}`,
           403
         )
       );

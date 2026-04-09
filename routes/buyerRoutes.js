@@ -37,6 +37,7 @@ router.get('/unlocked-properties', buyerController.getUnlockedProperties);
 const { asyncHandler } = require('../middleware/errorHandler');
 const Property = require('../models/Property');
 const PropertyStatusHistory = require('../models/PropertyStatusHistory');
+const User = require('../models/User');
 const mongoose = require('mongoose');
 
 // Buyer Watchlist Model (simple implementation)
@@ -92,8 +93,10 @@ router.get('/watchlist', asyncHandler(async (req, res) => {
       .sort({ dateAdded: -1 });
     
     // Transform data and add computed fields
-    const watchlistWithComputed = watchlist.map(item => ({
-      _id: item.property._id,
+    const watchlistWithComputed = watchlist
+      .filter(item => item.property) // Ensure property exists
+      .map(item => ({
+        _id: item.property._id,
       title: item.property.title,
       address: item.property.address,
       price: item.property.price,
@@ -131,9 +134,22 @@ router.get('/watchlist', asyncHandler(async (req, res) => {
 router.post('/watchlist/:propertyId', asyncHandler(async (req, res) => {
   try {
     const { propertyId } = req.params;
+    console.log(`[WATCHLIST_ADD] Received propertyId: "${propertyId}" (type: ${typeof propertyId})`);
+    
+    // Check if propertyId is a valid hex string of 24 characters
+    if (!mongoose.Types.ObjectId.isValid(propertyId)) {
+      console.warn(`[WATCHLIST_ADD] Invalid propertyId format detected: "${propertyId}"`);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid property ID format'
+      });
+    }
+    
+    // Explicitly cast to ObjectId
+    const oid = new mongoose.Types.ObjectId(propertyId);
     
     // Verify property exists
-    const property = await Property.findById(propertyId);
+    const property = await Property.findById(oid);
     if (!property) {
       return res.status(404).json({
         success: false,
@@ -141,37 +157,55 @@ router.post('/watchlist/:propertyId', asyncHandler(async (req, res) => {
       });
     }
     
-    // Add to watchlist (using upsert to prevent duplicates)
-    const watchlistItem = await BuyerWatchlist.findOneAndUpdate(
-      { buyer: req.user._id, property: propertyId },
-      { 
-        buyer: req.user._id, 
-        property: propertyId,
-        dateAdded: new Date()
-      },
-      { upsert: true, new: true }
-    );
+    // Check if already in watchlist to handle toggle (if needed) or just add
+    // The requirement says: "If not -> push to favorites and save. If yes -> remove from favorites (toggle behavior)"
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const isFavorite = user.favorites.some(id => id.toString() === propertyId);
     
-    console.log(`⭐ Property ${property.title} added to watchlist for buyer ${req.user.name}`);
-    
-    res.json({
-      success: true,
-      message: 'Property added to watchlist',
-      data: watchlistItem
-    });
-    
-  } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        message: 'Property already in watchlist'
+    if (isFavorite) {
+      // Toggle: Remove from watchlist
+      await BuyerWatchlist.findOneAndDelete({ buyer: req.user._id, property: oid });
+      await User.findByIdAndUpdate(req.user._id, { $pull: { favorites: oid } });
+      
+      console.log(`❌ Property ${property.title} removed from watchlist (toggle) for buyer ${req.user.name}`);
+      return res.json({
+        success: true,
+        message: 'Property removed from watchlist',
+        isWatching: false
+      });
+    } else {
+      // Toggle: Add to watchlist
+      const watchlistItem = await BuyerWatchlist.findOneAndUpdate(
+        { buyer: req.user._id, property: oid },
+        { 
+          buyer: req.user._id, 
+          property: oid,
+          dateAdded: new Date()
+        },
+        { upsert: true, new: true }
+      );
+      
+      await User.findByIdAndUpdate(req.user._id, { $addToSet: { favorites: oid } });
+      
+      console.log(`⭐ Property ${property.title} added to watchlist for buyer ${req.user.name}`);
+      return res.json({
+        success: true,
+        message: 'Property added to watchlist',
+        data: watchlistItem,
+        isWatching: true
       });
     }
     
-    console.error('Error adding to watchlist:', error);
+  } catch (error) {
+    console.error('[WATCHLIST_ADD_ERROR]:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to add property to watchlist'
+      message: 'Internal server error while updating watchlist',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 }));
@@ -180,10 +214,19 @@ router.post('/watchlist/:propertyId', asyncHandler(async (req, res) => {
 router.delete('/watchlist/:propertyId', asyncHandler(async (req, res) => {
   try {
     const { propertyId } = req.params;
+    console.log(`[WATCHLIST_REMOVE] Received propertyId: "${propertyId}"`);
+    
+    // Verify propertyId is a valid ObjectId
+    if (!mongoose.Types.ObjectId.isValid(propertyId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid property ID format'
+      });
+    }
     
     const result = await BuyerWatchlist.findOneAndDelete({
       buyer: req.user._id,
-      property: propertyId
+      property: new mongoose.Types.ObjectId(propertyId)
     });
     
     if (!result) {
@@ -192,6 +235,11 @@ router.delete('/watchlist/:propertyId', asyncHandler(async (req, res) => {
         message: 'Property not found in watchlist'
       });
     }
+    
+    // Also remove from User's favorites array
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { favorites: new mongoose.Types.ObjectId(propertyId) }
+    });
     
     console.log(`❌ Property removed from watchlist for buyer ${req.user.name}`);
     
