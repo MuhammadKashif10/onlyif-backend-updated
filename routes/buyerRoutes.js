@@ -78,6 +78,22 @@ buyerWatchlistSchema.index({ buyer: 1, property: 1 }, { unique: true });
 // Check if model already exists to avoid re-compilation error
 const BuyerWatchlist = mongoose.models.BuyerWatchlist || mongoose.model('BuyerWatchlist', buyerWatchlistSchema);
 
+// Resolve incoming property identifier to Mongo ObjectId.
+// Supports direct ObjectId strings and property slugs.
+const resolvePropertyObjectId = async (propertyIdentifier) => {
+  if (!propertyIdentifier) {
+    return { property: null, propertyId: null };
+  }
+
+  if (mongoose.Types.ObjectId.isValid(propertyIdentifier)) {
+    const property = await Property.findById(new mongoose.Types.ObjectId(propertyIdentifier));
+    return { property, propertyId: property?._id || null };
+  }
+
+  const property = await Property.findOne({ slug: propertyIdentifier });
+  return { property, propertyId: property?._id || null };
+};
+
 // Get buyer watchlist
 router.get('/watchlist', asyncHandler(async (req, res) => {
   try {
@@ -135,27 +151,15 @@ router.post('/watchlist/:propertyId', asyncHandler(async (req, res) => {
   try {
     const { propertyId } = req.params;
     console.log(`[WATCHLIST_ADD] Received propertyId: "${propertyId}" (type: ${typeof propertyId})`);
-    
-    // Check if propertyId is a valid hex string of 24 characters
-    if (!mongoose.Types.ObjectId.isValid(propertyId)) {
-      console.warn(`[WATCHLIST_ADD] Invalid propertyId format detected: "${propertyId}"`);
+
+    const { property, propertyId: resolvedPropertyId } = await resolvePropertyObjectId(propertyId);
+    if (!property) {
       return res.status(400).json({
         success: false,
         message: 'Invalid property ID format'
       });
     }
-    
-    // Explicitly cast to ObjectId
-    const oid = new mongoose.Types.ObjectId(propertyId);
-    
-    // Verify property exists
-    const property = await Property.findById(oid);
-    if (!property) {
-      return res.status(404).json({
-        success: false,
-        message: 'Property not found'
-      });
-    }
+    const oid = resolvedPropertyId;
     
     // Check if already in watchlist to handle toggle (if needed) or just add
     // The requirement says: "If not -> push to favorites and save. If yes -> remove from favorites (toggle behavior)"
@@ -215,9 +219,9 @@ router.delete('/watchlist/:propertyId', asyncHandler(async (req, res) => {
   try {
     const { propertyId } = req.params;
     console.log(`[WATCHLIST_REMOVE] Received propertyId: "${propertyId}"`);
-    
-    // Verify propertyId is a valid ObjectId
-    if (!mongoose.Types.ObjectId.isValid(propertyId)) {
+
+    const { property, propertyId: resolvedPropertyId } = await resolvePropertyObjectId(propertyId);
+    if (!property) {
       return res.status(400).json({
         success: false,
         message: 'Invalid property ID format'
@@ -226,7 +230,7 @@ router.delete('/watchlist/:propertyId', asyncHandler(async (req, res) => {
     
     const result = await BuyerWatchlist.findOneAndDelete({
       buyer: req.user._id,
-      property: new mongoose.Types.ObjectId(propertyId)
+      property: resolvedPropertyId
     });
     
     if (!result) {
@@ -238,7 +242,7 @@ router.delete('/watchlist/:propertyId', asyncHandler(async (req, res) => {
     
     // Also remove from User's favorites array
     await User.findByIdAndUpdate(req.user._id, {
-      $pull: { favorites: new mongoose.Types.ObjectId(propertyId) }
+      $pull: { favorites: resolvedPropertyId }
     });
     
     console.log(`❌ Property removed from watchlist for buyer ${req.user.name}`);
