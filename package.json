@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "test": "jest",
     "seed": "node scripts/seed.js",
-    "seed:dev": "NODE_=development node scripts/seed.js"
+    "seed:dev": "NODE_=development node scripts/seed.js",
+    "migrate:legacy-roles": "node scripts/migrateLegacyUserRoles.js"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.87.1",

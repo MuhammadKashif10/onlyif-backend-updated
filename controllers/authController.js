@@ -207,6 +207,19 @@ const login = async (req, res) => {
       );
     }
 
+    // Backward-compatible role migration for legacy users created before roles[] rollout
+    const hasRolesArray = Array.isArray(user.roles) && user.roles.length > 0;
+    const legacyRole = user.role;
+    if (!hasRolesArray && legacyRole && ['buyer', 'seller', 'agent', 'admin'].includes(legacyRole)) {
+      user.roles = [legacyRole];
+      user.acceptedRoles = {
+        buyer: Boolean(user.acceptedRoles?.buyer || legacyRole === 'buyer'),
+        seller: Boolean(user.acceptedRoles?.seller || legacyRole === 'seller'),
+        agent: Boolean(user.acceptedRoles?.agent || legacyRole === 'agent'),
+      };
+      await user.save();
+    }
+
     const token = generateToken(user._id);
 
     // Remove password from response
