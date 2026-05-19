@@ -13,6 +13,14 @@ const generateToken = (id) => {
   });
 };
 
+const normalizePhoneNumber = (phone) => {
+  const trimmed = phone?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.startsWith('+')
+    ? `+${trimmed.slice(1).replace(/\D/g, '')}`
+    : trimmed.replace(/\D/g, '');
+};
+
 // @desc    Register user
 // @route   POST /api/auth/register
 // @access  Public
@@ -20,6 +28,7 @@ const generateToken = (id) => {
 const register = async (req, res) => {
   try {
     const { firstName, lastName, email, password, role, phone, brokerage, yearsOfExperience, specialization } = req.body;
+    const normalizedPhone = normalizePhoneNumber(phone);
 
     // Block agent registration - agents can only be created by admin
     if (role === 'agent' || brokerage) {
@@ -67,7 +76,7 @@ const register = async (req, res) => {
       email: email.toLowerCase().trim(),
       password,
       role: userRole,
-      phone: phone ? phone.trim() : undefined
+      phone: normalizedPhone
     };
 
     // Create user

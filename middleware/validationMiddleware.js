@@ -56,8 +56,12 @@ const validateRegister = [
     .custom((value, { req }) => {
       if (!value && req.body.role !== 'agent') return true;
       if (!value && req.body.role === 'agent') throw new Error('Phone number is required for agents');
+      const trimmed = (value || '').trim();
+      const normalizedPhone = trimmed.startsWith('+')
+        ? `+${trimmed.slice(1).replace(/\D/g, '')}`
+        : trimmed.replace(/\D/g, '');
       const phoneRegex = /^(\+?[1-9]\d{8,14}|0[2-4789]\d{8})$/;
-      if (!phoneRegex.test((value || '').trim())) {
+      if (!phoneRegex.test(normalizedPhone)) {
         throw new Error('Please provide a valid phone (AU: 04XX XXX XXX, no country code needed)');
       }
       return true;

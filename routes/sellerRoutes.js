@@ -9,17 +9,18 @@ const { getSellerOverview, getSellerListings, getSellerAnalytics } = require('..
 // All seller routes require authentication
 router.use(authMiddleware);
 
-// Seller overview statistics
-router.get('/:id/overview', asyncHandler(getSellerOverview));
-
-// Seller analytics with detailed chart data
-router.get('/:id/analytics', asyncHandler(getSellerAnalytics));
-
 // Helper to reuse controller with req.user.id
 const useUserIdParam = (req, res, next) => {
   req.params.id = req.user.id.toString();
   next();
 };
+
+// Seller overview statistics
+router.get('/me/overview', useUserIdParam, asyncHandler(getSellerOverview));
+router.get('/:id/overview', asyncHandler(getSellerOverview));
+
+// Seller analytics with detailed chart data
+router.get('/:id/analytics', asyncHandler(getSellerAnalytics));
 
 // Seller listings (secure, validated)
 router.get('/:id/listings', validateMongoId, asyncHandler(getSellerListings));
