@@ -22,6 +22,12 @@ const requestAgentRole = async (req, res) => {
     }
 
     user.role = 'agent';
+    user.roles = Array.from(new Set([...(user.roles || []), 'agent']));
+    user.acceptedRoles = {
+      buyer: Boolean(user.acceptedRoles?.buyer),
+      seller: Boolean(user.acceptedRoles?.seller),
+      agent: true
+    };
     user.agentStatus = 'pending';
     user.isActive = true;
     user.isSuspended = false;
@@ -50,6 +56,8 @@ const requestAgentRole = async (req, res) => {
           name: user.name,
           email: user.email,
           role: user.role,
+          roles: user.roles,
+          acceptedRoles: user.acceptedRoles,
           agentStatus: user.agentStatus,
         },
         'Agent request submitted successfully'

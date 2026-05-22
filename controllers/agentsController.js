@@ -374,7 +374,15 @@ const createAgent = async (req, res) => {
       password: password, // Remove manual hashing - let pre-save middleware handle it
       phone: phone ? phone.trim() : null, // Store phone at top level for consistency
       role: 'agent',
+      roles: ['agent'],
+      acceptedRoles: {
+        buyer: false,
+        seller: false,
+        agent: true
+      },
+      agentStatus: 'approved',
       isActive: true,
+      isSuspended: false,
       experience: experience ? experience.trim() : null,
       location: location ? location.trim() : null,
       bankAccountNumber: bankAccountNumber ? bankAccountNumber.trim() : null,
@@ -412,6 +420,9 @@ const createAgent = async (req, res) => {
       email: newAgent.email,
       phone: newAgent.phone, // Include phone in response
       role: newAgent.role,
+      roles: newAgent.roles,
+      acceptedRoles: newAgent.acceptedRoles,
+      agentStatus: newAgent.agentStatus,
       isActive: newAgent.isActive,
       experience: newAgent.experience,
       location: newAgent.location,

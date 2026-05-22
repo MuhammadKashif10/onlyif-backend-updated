@@ -720,24 +720,30 @@ router.get('/stats/users', asyncHandler(async (req, res) => {
 router.get('/agents', asyncHandler(async (req, res) => {
   try {
     const agents = await User.find({ role: 'agent', isDeleted: false })
-      .select('name email phone isActive isSuspended createdAt agentProfile avatar profileImage')
+      .select('name email phone isActive isSuspended agentStatus createdAt agentProfile avatar profileImage')
       .sort({ createdAt: -1 });
     
     // Transform the data to match frontend expectations
-    const transformedAgents = agents.map(agent => ({
-      _id: agent._id,  // Use _id instead of id for consistency
-      id: agent._id,   // Keep id for backward compatibility
-      name: agent.name,
-      email: agent.email,
-      phone: agent.phone || agent.agentProfile?.phone || '',
-      licenseNumber: agent.agentProfile?.licenseNumber || '',
-      status: agent.isSuspended ? 'suspended' : (agent.isActive ? 'approved' : 'pending'),
-      joinedDate: agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : '',
-      totalListings: 0, // You can calculate this from properties
-      totalSales: 0, // You can calculate this from transactions
-      rating: 5, // Default rating
-      profileImage: agent.profileImage || agent.avatar || ''
-    }));
+    const transformedAgents = agents.map(agent => {
+      const approvalStatus = agent.agentStatus || (agent.isActive ? 'approved' : 'pending');
+      const displayStatus = agent.isSuspended ? 'suspended' : approvalStatus;
+
+      return {
+        _id: agent._id,  // Use _id instead of id for consistency
+        id: agent._id,   // Keep id for backward compatibility
+        name: agent.name,
+        email: agent.email,
+        phone: agent.phone || agent.agentProfile?.phone || '',
+        licenseNumber: agent.agentProfile?.licenseNumber || '',
+        status: displayStatus,
+        agentStatus: agent.agentStatus || approvalStatus,
+        joinedDate: agent.createdAt ? new Date(agent.createdAt).toLocaleDateString() : '',
+        totalListings: 0, // You can calculate this from properties
+        totalSales: 0, // You can calculate this from transactions
+        rating: 5, // Default rating
+        profileImage: agent.profileImage || agent.avatar || ''
+      };
+    });
     
     res.json({
       success: true,
@@ -1096,6 +1102,7 @@ router.patch('/agents/:id/status', asyncHandler(async (req, res) => {
         break;
       case 'approved':
         updateFields = {
+          agentStatus: 'approved',
           isSuspended: false,
           isActive: true,
           suspendedAt: null,
@@ -1105,8 +1112,9 @@ router.patch('/agents/:id/status', asyncHandler(async (req, res) => {
         break;
       case 'pending':
         updateFields = {
+          agentStatus: 'pending',
           isSuspended: false,
-          isActive: false,
+          isActive: true,
           suspendedAt: null,
           suspendedBy: null,
           suspensionReason: null
@@ -1114,11 +1122,12 @@ router.patch('/agents/:id/status', asyncHandler(async (req, res) => {
         break;
       case 'rejected':
         updateFields = {
-          isSuspended: true,
-          isActive: false,
-          suspendedAt: new Date(),
-          suspendedBy: req.user.id,
-          suspensionReason: 'Rejected by admin'
+          agentStatus: 'rejected',
+          isSuspended: false,
+          isActive: true,
+          suspendedAt: null,
+          suspendedBy: null,
+          suspensionReason: null
         };
         break;
     }
@@ -1128,7 +1137,7 @@ router.patch('/agents/:id/status', asyncHandler(async (req, res) => {
       { _id: id, role: 'agent', isDeleted: false },
       updateFields,
       { new: true }
-    ).select('name email isActive isSuspended role');
+    ).select('name email isActive isSuspended agentStatus role');
     
     if (!agent) {
       return res.status(404).json({
@@ -1142,7 +1151,8 @@ router.patch('/agents/:id/status', asyncHandler(async (req, res) => {
       id: agent._id,
       name: agent.name,
       email: agent.email,
-      status: agent.isSuspended ? 'suspended' : (agent.isActive ? 'approved' : 'pending')
+      status: agent.isSuspended ? 'suspended' : (agent.agentStatus || (agent.isActive ? 'approved' : 'pending')),
+      agentStatus: agent.agentStatus || (agent.isActive ? 'approved' : 'pending')
     };
     
     res.json({
