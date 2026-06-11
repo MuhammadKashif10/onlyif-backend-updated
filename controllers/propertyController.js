@@ -619,16 +619,19 @@ const getPropertyById = async (req, res) => {
     // }
     // Check if the parameter is a valid MongoDB ObjectId
     const mongoose = require('mongoose');
+    const agentFields = 'name email phone avatar profileImage role';
     if (mongoose.Types.ObjectId.isValid(id) && id.length === 24) {
       // Search by ObjectId
       property = await Property.findById(id)
         .populate('owner', 'name email')
-        .populate('agents.agent', 'name email phone');
+        .populate('agents.agent', agentFields)
+        .populate('assignedAgent', agentFields);
     } else {
       // Search by slug
       property = await Property.findOne({ slug: id })
         .populate('owner', 'name email')
-        .populate('agents.agent', 'name email phone');
+        .populate('agents.agent', agentFields)
+        .populate('assignedAgent', agentFields);
     }
 
     if (!property) {
@@ -669,7 +672,31 @@ const getPropertyById = async (req, res) => {
         lat: propertyObj.location.coordinates[1]
       };
     }
-    
+
+    // Resolve the assigned agent consistently:
+    //   1) the active entry in agents[] (do NOT use agents[0] blindly)
+    //   2) fall back to the populated assignedAgent reference
+    //   3) otherwise none
+    const toAgentDTO = (agentUser) => {
+      if (!agentUser || !agentUser._id) return null;
+      return {
+        id: agentUser._id.toString(),
+        name: agentUser.name || 'Agent Name',
+        email: agentUser.email || '',
+        phone: agentUser.phone || contactPhone || '',
+        avatar: agentUser.avatar || agentUser.profileImage || null,
+        title: agentUser.role === 'agent' ? 'Real Estate Agent' : (agentUser.role || 'Real Estate Agent')
+      };
+    };
+
+    const activeAgentEntry = Array.isArray(propertyObj.agents)
+      ? propertyObj.agents.find((a) => a && a.isActive && a.agent && a.agent._id)
+      : null;
+    const resolvedAgentUser =
+      (activeAgentEntry && activeAgentEntry.agent) ||
+      (propertyObj.assignedAgent && propertyObj.assignedAgent._id ? propertyObj.assignedAgent : null);
+    const resolvedAgent = toAgentDTO(resolvedAgentUser);
+
     const normalizedProperty = {
       id: propertyObj._id.toString(),
       _id: propertyObj._id.toString(),
@@ -698,14 +725,8 @@ const getPropertyById = async (req, res) => {
       dateListed: propertyObj.dateListed || propertyObj.createdAt,
       daysOnMarket: propertyObj.daysOnMarket || 0,
       slug: propertyObj.slug, // Include slug in response
-      agent: propertyObj.agents && propertyObj.agents.length > 0 && propertyObj.agents[0].agent 
-        ? {
-            id: propertyObj.agents[0].agent._id.toString(),
-            name: propertyObj.agents[0].agent.name || 'Agent Name',
-            phone: propertyObj.agents[0].agent.phone || contactPhone || '',
-            email: propertyObj.agents[0].agent.email || ''
-          }
-        : null
+      agent: resolvedAgent,
+      agentAssigned: !!resolvedAgent
     };
 
     res.json(
@@ -848,7 +869,33 @@ const assignAgent = async (req, res) => {
     );
   }
 
+  // Keep assignedAgent and agents[] consistent (single active agent).
   property.assignedAgent = agentId;
+  property.agents = Array.isArray(property.agents) ? property.agents : [];
+
+  // Deactivate all currently active agents.
+  property.agents.forEach((entry) => { entry.isActive = false; });
+
+  // Reactivate an existing entry for this agent, or push a new active one
+  // (avoids duplicate active entries for the same agent).
+  const existing = property.agents.find(
+    (entry) => entry.agent && entry.agent.toString() === agentId.toString()
+  );
+  if (existing) {
+    existing.isActive = true;
+    existing.assignedAt = new Date();
+    existing.assignedBy = req.user.id;
+  } else {
+    property.agents.push({
+      agent: agentId,
+      role: 'listing',
+      commissionRate: 3,
+      assignedAt: new Date(),
+      assignedBy: req.user.id,
+      isActive: true
+    });
+  }
+
   await property.save();
 
   // Create notification for agent

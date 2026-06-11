@@ -13,9 +13,13 @@ const getAgentStats = async (req, res) => {
   try {
     const agentId = req.params.agentId;
     
-    // Get assigned properties count
-    const assignedProperties = await Property.countDocuments({ 
-      assignedAgent: agentId,
+    // Get assigned properties count — match active agents[] entry OR assignedAgent
+    // (same agent-matching logic as getAgentProperties so the count matches the list).
+    const assignedProperties = await Property.countDocuments({
+      $or: [
+        { agents: { $elemMatch: { agent: agentId, isActive: true } } },
+        { assignedAgent: agentId }
+      ],
       status: { $in: ['active', 'pending'] }
     });
     
@@ -96,13 +100,13 @@ const getAgentProperties = async (req, res) => {
   try {
     const { agentId } = req.params;
     const { page = 1, limit = 10, status } = req.query;
+    // Match properties assigned either via an active agents[] entry OR the
+    // primary assignedAgent reference (keeps parity with getPropertyById).
     const query = {
-      agents: {
-        $elemMatch: {
-          agent: agentId,
-          isActive: true
-        }
-      },
+      $or: [
+        { agents: { $elemMatch: { agent: agentId, isActive: true } } },
+        { assignedAgent: agentId }
+      ],
       isDeleted: false
     };
 

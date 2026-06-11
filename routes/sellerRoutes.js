@@ -23,10 +23,11 @@ router.get('/:id/overview', asyncHandler(getSellerOverview));
 router.get('/:id/analytics', asyncHandler(getSellerAnalytics));
 
 // Seller listings (secure, validated)
-router.get('/:id/listings', validateMongoId, asyncHandler(getSellerListings));
-
-// Companion route: /sellers/me/listings
+// NOTE: the literal /me/listings MUST be declared before the parameterized
+// /:id/listings — otherwise Express matches /:id/listings first with id="me"
+// and validateMongoId rejects "me" as an invalid ObjectId (400 Validation failed).
 router.get('/me/listings', useUserIdParam, asyncHandler(getSellerListings));
+router.get('/:id/listings', validateMongoId, asyncHandler(getSellerListings));
 
 // Legacy route (keeping for backward compatibility)
 router.get('/properties', asyncHandler(getSellerProperties));
