@@ -16,7 +16,7 @@ const inspectionSchema = new mongoose.Schema({
       validator: async function(agentId) {
         const User = mongoose.model('User');
         const agent = await User.findById(agentId);
-        return agent && agent.role === 'agent';
+        return agent && (agent.role === 'agent' || (agent.roles || []).includes('agent'));
       },
       message: 'Referenced user must be an agent'
     }
@@ -24,12 +24,13 @@ const inspectionSchema = new mongoose.Schema({
   buyer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'Buyer is required'],
+    // Optional: agent-scheduled inspections may not have a specific buyer.
     validate: {
       validator: async function(buyerId) {
+        if (!buyerId) return true;
         const User = mongoose.model('User');
         const buyer = await User.findById(buyerId);
-        return buyer && buyer.role === 'buyer';
+        return buyer && (buyer.role === 'buyer' || (buyer.roles || []).includes('buyer'));
       },
       message: 'Referenced user must be a buyer'
     }
@@ -42,7 +43,7 @@ const inspectionSchema = new mongoose.Schema({
       validator: async function(sellerId) {
         const User = mongoose.model('User');
         const seller = await User.findById(sellerId);
-        return seller && seller.role === 'seller';
+        return seller && (seller.role === 'seller' || (seller.roles || []).includes('seller'));
       },
       message: 'Referenced user must be a seller'
     }

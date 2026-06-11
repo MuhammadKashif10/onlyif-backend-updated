@@ -448,65 +448,153 @@ router.get('/payments/:transactionId/invoice.pdf', asyncHandler(async (req, res)
     // Pipe PDF to response
     doc.pipe(res);
 
-    // Header
-    doc
-      .fontSize(20)
-      .text('OnlyIf Real Estate — Payment Receipt', { align: 'left' })
-      .moveDown(0.5);
+    // ---- Layout constants / brand palette ----
+    const left = doc.page.margins.left;
+    const right = doc.page.width - doc.page.margins.right;
+    const contentWidth = right - left;
+    const GREEN = '#3AB861';
+    const DARK = '#111827';
+    const GRAY = '#6B7280';
+    const BORDER = '#E5E7EB';
+    const ZEBRA = '#F9FAFB';
 
-    // Meta
-    doc
-      .fontSize(11)
-      .text(`Transaction ID: ${transactionId}`)
-      .text(`Date: ${new Date(txn.createdAt).toLocaleString()}`)
-      .text(`Type: ${txn.transactionType === 'unlock_fee' ? 'Unlock Fee' : (txn.transactionType || 'Payment')}`)
-      .moveDown();
-
-    // Parties
-    doc
-      .fontSize(12)
-      .text('Buyer:', { underline: true })
-      .text(`${txn.user?.name || '—'}`)
-      .text(`${txn.user?.email || ''}`)
-      .moveDown(0.5);
-
-    if (txn.property) {
-      const addr = txn.property.address;
-      const addressLine = addr
-        ? `${addr.street || ''}${addr.street ? ', ' : ''}${addr.city || ''}${addr.city ? ', ' : ''}${addr.state || ''} ${addr.zipCode || ''}`
-        : (txn.property.title || '—');
-      doc
-        .text('Property:', { underline: true })
-        .text(`${txn.property.title || '—'}`)
-        .text(addressLine)
-        .moveDown();
-    }
-
-    // Amounts
     const currency = 'A$';
-    const money = (v) => `${currency}${Number(v).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const money = (v) => `${currency}${Number(v || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    doc
-      .fontSize(12)
-      .text(`Amount Paid: ${money(txn.totalAmount || 0)}`)
-      .text(`Payment Method: ${txn.paymentMethod || 'stripe'}`)
-      .moveDown();
+    // ---- Header: brand (left) + title/meta (right) ----
+    doc.font('Helvetica-Bold').fontSize(26);
+    doc.fillColor(GREEN).text('Only', left, 52, { continued: true });
+    doc.fillColor(DARK).text('If');
+    doc.fillColor(GRAY).font('Helvetica').fontSize(9).text('Real Estate', left, 82);
 
-    // Line items (if present)
-    if (Array.isArray(txn.items) && txn.items.length) {
-      doc.fontSize(12).text('Items:', { underline: true }).moveDown(0.3);
-      txn.items.forEach((li, idx) => {
-        doc.text(`${idx + 1}. ${li.description} — Qty: ${li.quantity || 1} — Unit: ${money(li.unitPrice)} — Total: ${money(li.totalPrice)}`);
+    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(22).text('RECEIPT', left, 50, { align: 'right', width: contentWidth });
+    const dateStr = new Date(txn.createdAt).toLocaleDateString('en-AU', { year: 'numeric', month: 'short', day: 'numeric' });
+    doc.fillColor(GRAY).font('Helvetica').fontSize(9)
+      .text(`Transaction ID: ${transactionId}`, left, 80, { align: 'right', width: contentWidth })
+      .text(`Date: ${dateStr}`, left, 92, { align: 'right', width: contentWidth });
+
+    // divider
+    doc.moveTo(left, 112).lineTo(right, 112).lineWidth(2).strokeColor(GREEN).stroke();
+
+    // ---- Details: clean two-column label/value ----
+    const colGap = 24;
+    const colW = (contentWidth - colGap) / 2;
+    const rightColX = left + colW + colGap;
+    const addr = txn.property && txn.property.address;
+    const addressLine = addr
+      ? [addr.street, addr.city, addr.state, addr.zipCode].filter(Boolean).join(', ')
+      : (txn.property ? (txn.property.title || '—') : '—');
+    const typeLabel = txn.transactionType === 'unlock_fee' ? 'Unlock Fee' : (txn.transactionType || 'Payment');
+
+    const pair = (label, value, x, y, w) => {
+      doc.fillColor(GRAY).font('Helvetica').fontSize(8).text(String(label).toUpperCase(), x, y, { width: w });
+      doc.fillColor(DARK).font('Helvetica-Bold').fontSize(11).text(value || '—', x, y + 11, { width: w });
+    };
+
+    let y = 132;
+    pair('Buyer Name', txn.user?.name, left, y, colW);
+    pair('Payment Method', txn.paymentMethod || 'stripe', rightColX, y, colW);
+    y += 40;
+    pair('Buyer Email', txn.user?.email, left, y, colW);
+    pair('Transaction Type', typeLabel, rightColX, y, colW);
+    y += 40;
+    pair('Property Name', txn.property?.title, left, y, colW);
+    pair('Property Address', addressLine, rightColX, y, colW);
+    y += 56;
+
+    // ---- Items table ----
+    const cols = [
+      { key: 'idx', label: '#', w: 28, align: 'left' },
+      { key: 'desc', label: 'Description', w: 247, align: 'left' },
+      { key: 'qty', label: 'Qty', w: 50, align: 'center' },
+      { key: 'unit', label: 'Unit Price', w: 85, align: 'right' },
+      { key: 'total', label: 'Total', w: 85, align: 'right' },
+    ];
+    let cx = left;
+    cols.forEach((c) => { c.x = cx; cx += c.w; });
+    const pad = 6;
+
+    const items = (Array.isArray(txn.items) && txn.items.length)
+      ? txn.items
+      : [{ description: `Payment - ${typeLabel}`, quantity: 1, unitPrice: txn.totalAmount || 0, totalPrice: txn.totalAmount || 0 }];
+
+    const drawCells = (cells, yTop, { header = false, fill = null } = {}) => {
+      doc.font(header ? 'Helvetica-Bold' : 'Helvetica').fontSize(header ? 9 : 10);
+      let rowH = header ? 22 : 24;
+      if (!header) {
+        cols.forEach((c) => {
+          const h = doc.heightOfString(String(cells[c.key] ?? ''), { width: c.w - pad * 2, align: c.align });
+          rowH = Math.max(rowH, h + pad * 2);
+        });
+      }
+      if (header) doc.rect(left, yTop, contentWidth, rowH).fill(DARK);
+      else if (fill) doc.rect(left, yTop, contentWidth, rowH).fill(fill);
+
+      cols.forEach((c) => {
+        doc.fillColor(header ? '#FFFFFF' : DARK)
+          .font(header ? 'Helvetica-Bold' : 'Helvetica')
+          .fontSize(header ? 9 : 10)
+          .text(String(cells[c.key] ?? ''), c.x + pad, yTop + pad, { width: c.w - pad * 2, align: c.align });
       });
-      doc.moveDown();
-    }
+      return rowH;
+    };
 
-    // Footer
-    doc
-      .fontSize(10)
-      .text('Thank you for your payment.', { align: 'left' })
-      .moveDown(0.5)
-      .text('This receipt confirms successful payment processing.', { align: 'left' });
+    // header row
+    let rowY = y;
+    rowY += drawCells({ idx: '#', desc: 'Description', qty: 'Qty', unit: 'Unit Price', total: 'Total' }, rowY, { header: true });
+
+    // data rows
+    const rowTops = [];
+    items.forEach((li, idx) => {
+      rowTops.push(rowY);
+      const h = drawCells({
+        idx: String(idx + 1),
+        desc: li.description || '—',
+        qty: String(li.quantity || 1),
+        unit: money(li.unitPrice),
+        total: money(li.totalPrice != null ? li.totalPrice : (li.unitPrice || 0) * (li.quantity || 1)),
+      }, rowY, { fill: idx % 2 === 1 ? ZEBRA : null });
+      rowY += h;
+    });
+
+    // table grid (outer box + column separators + row separators)
+    const tableTop = y;
+    doc.lineWidth(0.5).strokeColor(BORDER);
+    doc.rect(left, tableTop, contentWidth, rowY - tableTop).stroke();
+    cols.slice(1).forEach((c) => doc.moveTo(c.x, tableTop).lineTo(c.x, rowY).stroke());
+    rowTops.forEach((ry) => doc.moveTo(left, ry).lineTo(right, ry).stroke());
+
+    // ---- Summary (right-aligned) ----
+    const subtotal = (typeof txn.subtotal === 'number')
+      ? txn.subtotal
+      : items.reduce((s, li) => s + Number(li.totalPrice != null ? li.totalPrice : (li.unitPrice || 0) * (li.quantity || 1)), 0);
+    const taxAmount = txn.tax && typeof txn.tax.amount === 'number' ? txn.tax.amount : 0;
+    const total = (typeof txn.totalAmount === 'number') ? txn.totalAmount : subtotal + taxAmount;
+
+    const sumW = 240;
+    const sumX = right - sumW;
+    let sy = rowY + 18;
+    const sumRow = (label, value, { bold = false, accent = false } = {}) => {
+      const h = 20;
+      if (accent) doc.rect(sumX, sy, sumW, h).fill(GREEN);
+      doc.font(bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(bold ? 12 : 10)
+        .fillColor(accent ? '#FFFFFF' : (bold ? DARK : GRAY))
+        .text(label, sumX + 10, sy + (bold ? 5 : 5), { width: sumW / 2 - 10, align: 'left' });
+      doc.fillColor(accent ? '#FFFFFF' : DARK)
+        .text(value, sumX + sumW / 2, sy + (bold ? 5 : 5), { width: sumW / 2 - 10, align: 'right' });
+      sy += h;
+    };
+    sumRow('Subtotal', money(subtotal));
+    if (taxAmount > 0) sumRow('GST', money(taxAmount));
+    sumRow('Total Paid', money(total), { bold: true, accent: true });
+
+    // ---- Footer ----
+    const footerY = doc.page.height - doc.page.margins.bottom - 40;
+    doc.lineWidth(0.5).strokeColor(BORDER).moveTo(left, footerY).lineTo(right, footerY).stroke();
+    doc.fillColor(DARK).font('Helvetica-Bold').fontSize(11)
+      .text('Thank you for choosing OnlyIf.', left, footerY + 12, { align: 'center', width: contentWidth });
+    doc.fillColor(GRAY).font('Helvetica').fontSize(8)
+      .text('This receipt confirms successful payment processing.', left, footerY + 28, { align: 'center', width: contentWidth });
 
     doc.end();
   } catch (error) {

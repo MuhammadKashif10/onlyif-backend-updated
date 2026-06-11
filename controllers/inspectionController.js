@@ -54,7 +54,9 @@ const scheduleInspection = async (req, res) => {
     const inspectionData = {
       property: propertyId,
       agent: req.user.id,
-      buyer: req.user.id, // For now, using current user as buyer
+      // Buyer is optional for agent-scheduled inspections; only set when a
+      // specific buyer is provided (don't use the agent as the buyer).
+      buyer: req.body.buyerId || undefined,
       seller: property.owner._id,
       datetime: new Date(datetime),
       inspector: {

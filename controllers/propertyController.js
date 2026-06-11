@@ -697,6 +697,23 @@ const getPropertyById = async (req, res) => {
       (propertyObj.assignedAgent && propertyObj.assignedAgent._id ? propertyObj.assignedAgent : null);
     const resolvedAgent = toAgentDTO(resolvedAgentUser);
 
+    // Seller contact phone is privileged: only the property owner (seller), the
+    // assigned agent, or an admin may receive it. Buyers (even after unlock) must
+    // NOT receive the seller's phone, to enforce the agent-mediated workflow.
+    const viewerId = req.user && req.user.id ? req.user.id.toString() : null;
+    const toId = (v) => (v && v._id ? v._id.toString() : v ? v.toString() : null);
+    const isAdmin = !!(req.user && (req.user.role === 'admin' || (Array.isArray(req.user.roles) && req.user.roles.includes('admin'))));
+    const ownerId = toId(propertyObj.owner);
+    const isOwner = !!(viewerId && ownerId && viewerId === ownerId);
+    const assignedAgentId = toId(propertyObj.assignedAgent);
+    const isAssignedAgent = !!(viewerId && (
+      (assignedAgentId && viewerId === assignedAgentId) ||
+      (Array.isArray(propertyObj.agents) && propertyObj.agents.some(
+        (a) => a && a.isActive && a.agent && toId(a.agent) === viewerId
+      ))
+    ));
+    const canViewSellerContact = isAdmin || isOwner || isAssignedAgent;
+
     const normalizedProperty = {
       id: propertyObj._id.toString(),
       _id: propertyObj._id.toString(),
@@ -720,7 +737,7 @@ const getPropertyById = async (req, res) => {
       images: propertyObj.images || [],
       mainImage: mainImageUrl,
       coordinates: coordinates,
-      contactPhone: showFull ? contactPhone : null,
+      contactPhone: canViewSellerContact ? contactPhone : null,
       featured: propertyObj.featured || false,
       dateListed: propertyObj.dateListed || propertyObj.createdAt,
       daysOnMarket: propertyObj.daysOnMarket || 0,

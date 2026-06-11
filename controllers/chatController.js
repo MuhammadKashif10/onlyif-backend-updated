@@ -1,6 +1,10 @@
 'use strict';
 
 const Chat = require('../models/Chat');
+const User = require('../models/User');
+
+// True if the user holds the given role (primary `role` or in `roles[]`).
+const hasRole = (u, role) => !!(u && (u.role === role || (Array.isArray(u.roles) && u.roles.includes(role))));
 
 /**
  * Send a new message (buyer ⇄ agent only).
@@ -15,6 +19,28 @@ exports.sendMessage = async (req, res, next) => {
 
     if (!receiverId || !text) {
       return res.status(400).json({ message: 'receiverId and text are required' });
+    }
+
+    // Enforce agent-mediated workflow: block direct buyer <-> seller messaging.
+    // Allowed: buyer<->agent, seller<->agent (any pair where an agent is involved).
+    const receiver = await User.findById(receiverId).select('role roles');
+    if (!receiver) {
+      return res.status(404).json({ message: 'Recipient not found' });
+    }
+    const senderIsBuyer = hasRole(req.user, 'buyer');
+    const senderIsSeller = hasRole(req.user, 'seller');
+    const senderIsAgent = hasRole(req.user, 'agent');
+    const receiverIsBuyer = hasRole(receiver, 'buyer');
+    const receiverIsSeller = hasRole(receiver, 'seller');
+    const receiverIsAgent = hasRole(receiver, 'agent');
+
+    const isBuyerSellerPair =
+      (senderIsBuyer && receiverIsSeller) || (senderIsSeller && receiverIsBuyer);
+    // Only block when no agent is part of the conversation.
+    if (isBuyerSellerPair && !senderIsAgent && !receiverIsAgent) {
+      return res.status(403).json({
+        message: 'Direct buyer-seller messaging is not allowed. Please communicate through the assigned agent.'
+      });
     }
 
     // Save to DB
