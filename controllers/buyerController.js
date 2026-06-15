@@ -7,8 +7,9 @@ const BuyerProfile = require('../models/BuyerProfile');
 const BuyerNotification = require('../models/BuyerNotification');
 const SavedSearch = require('../models/SavedSearch');
 const Purchase = require('../models/Purchase');
+const { UNLOCK_FEE_CENTS } = require('../config/pricing');
 
-// @desc    Purchase property unlock ($49)
+// @desc    Purchase property unlock ($19)
 // @route   POST /api/buyer/unlock-property
 // @access  Private (Buyer only)
 const unlockProperty = async (req, res) => {
@@ -44,7 +45,7 @@ const unlockProperty = async (req, res) => {
     );
   }
 
-  const unlockAmount = 4900; // A$49.00 in cents
+  const unlockAmount = UNLOCK_FEE_CENTS; // buyer property unlock fee (in cents)
   // Create Stripe PaymentIntent for property unlock
   const paymentIntent = await stripeService.createPaymentIntent(
     unlockAmount,

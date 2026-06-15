@@ -1,5 +1,6 @@
 // models/Purchase.js
 const mongoose = require('mongoose');
+const { UNLOCK_FEE_CENTS } = require('../config/pricing');
 
 const purchaseSchema = new mongoose.Schema({
   user: {
@@ -18,7 +19,7 @@ const purchaseSchema = new mongoose.Schema({
   },
   amount: {
     type: Number,
-    default: 4900 // 49.00 AUD in cents
+    default: UNLOCK_FEE_CENTS // buyer property unlock fee (in cents)
   },
   currency: {
     type: String,

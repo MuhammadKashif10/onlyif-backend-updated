@@ -3,6 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const { allowAdmin } = require('../middleware/roleMiddleware');
 const { asyncHandler } = require('../middleware/errorHandler');
+const { UNLOCK_FEE_CENTS } = require('../config/pricing');
 const {
   getAllUsers,
   toggleUserSuspension,
@@ -342,7 +343,7 @@ router.get('/payments', asyncHandler(async (req, res) => {
       userName: p.user?.name || '—',
       propertyId: p.property?._id,
       propertyAddress: p.property?.title || '—',
-      amount: (p.amount || 4900) / 100, // Convert from cents to dollars
+      amount: (p.amount || UNLOCK_FEE_CENTS) / 100, // Convert from cents to dollars
       type: 'unlock fee',
       status: p.status === 'paid' ? 'completed' : (p.status || 'pending'),
       paymentMethod: 'stripe',
@@ -390,6 +391,33 @@ router.get('/payments', asyncHandler(async (req, res) => {
   res.json({ success: true, data: payments });
 }));
 
+// Hard-delete a payment record (admin only). The admin payments list is a unified
+// view of Transaction and Purchase records, so we try both by _id.
+router.delete('/payments/:id', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const mongoose = require('mongoose');
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ success: false, message: 'Invalid payment id' });
+  }
+
+  const Transaction = require('../models/Transaction');
+  const Purchase = require('../models/Purchase');
+
+  let deleted = await Transaction.findByIdAndDelete(id);
+  let source = 'transaction';
+  if (!deleted) {
+    deleted = await Purchase.findByIdAndDelete(id);
+    source = 'purchase';
+  }
+
+  if (!deleted) {
+    return res.status(404).json({ success: false, message: 'Payment not found' });
+  }
+
+  console.log(`🗑️ Admin ${req.user._id} hard-deleted payment ${id} (source: ${source})`);
+  res.json({ success: true, data: { id, source }, message: 'Payment deleted' });
+}));
+
 router.get('/payments/:transactionId/invoice.pdf', asyncHandler(async (req, res) => {
   try {
     const { transactionId } = req.params;
@@ -423,10 +451,10 @@ router.get('/payments/:transactionId/invoice.pdf', asyncHandler(async (req, res)
             transactionType: 'unlock_fee',
             user: purchase.user,
             property: purchase.property,
-            totalAmount: (purchase.amount || 4900) / 100,
+            totalAmount: (purchase.amount || UNLOCK_FEE_CENTS) / 100,
             paymentMethod: 'stripe',
             createdAt: purchase.createdAt,
-            items: [{ description: `Property unlock access - ${purchase.property?.title || 'Property'}`, unitPrice: (purchase.amount || 4900) / 100, totalPrice: (purchase.amount || 4900) / 100, quantity: 1 }]
+            items: [{ description: `Property unlock access - ${purchase.property?.title || 'Property'}`, unitPrice: (purchase.amount || UNLOCK_FEE_CENTS) / 100, totalPrice: (purchase.amount || UNLOCK_FEE_CENTS) / 100, quantity: 1 }]
           };
         }
       } catch (_) {}

@@ -2,6 +2,7 @@ const express = require('express');
 const Stripe = require('stripe');
 const Purchase = require('../models/Purchase');
 const PaymentRecord = require('../models/PaymentRecord');
+const { UNLOCK_FEE_CENTS, UNLOCK_FEE_DOLLARS } = require('../config/pricing');
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
@@ -139,13 +140,35 @@ console.log(process.env.STRIPE_WEBHOOK_SECRET)
         }
       }
 
+      // Marketplace service purchase (Seller Media Studio) — webhook is the source of truth
+      if (session.metadata?.type === 'service_purchase') {
+        try {
+          const ServiceOrder = require('../models/ServiceOrder');
+          const serviceOrderService = require('../services/serviceOrderService');
+
+          const lookup = [{ stripeSessionId: session.id }];
+          if (session.metadata.orderId) lookup.push({ _id: session.metadata.orderId });
+          const order = await ServiceOrder.findOne({ $or: lookup });
+
+          if (order && order.paymentStatus !== 'paid') {
+            // ONLYIF email + admin notifications + socket (never throws out of webhook)
+            await serviceOrderService.confirmAndFulfill(order, session, req.app);
+            console.log(`✅ Service order ${order.orderNumber} marked paid via Stripe`);
+          } else if (!order) {
+            console.warn(`⚠️ service_purchase webhook: no ServiceOrder found for session ${session.id}`);
+          }
+        } catch (e) {
+          console.error('Service purchase webhook handling failed:', e?.message);
+        }
+      }
+
       // Buyer platform unlock (marketing / How it works — no property)
       if (session.metadata?.type === 'buyer_platform_unlock' && session.metadata?.userId && session.payment_intent) {
         try {
           const Transaction = require('../models/Transaction');
           const existingTxn = await Transaction.findOne({ transactionId: session.payment_intent });
           if (!existingTxn) {
-            const amount = (session.amount_total || 4900) / 100;
+            const amount = (session.amount_total || UNLOCK_FEE_CENTS) / 100;
             const txn = new Transaction({
               user: session.metadata.userId,
               transactionId: session.payment_intent,
@@ -153,7 +176,7 @@ console.log(process.env.STRIPE_WEBHOOK_SECRET)
               items: [
                 {
                   itemType: 'service',
-                  description: 'Buyer platform unlock fee ($49)',
+                  description: `Buyer platform unlock fee ($${UNLOCK_FEE_DOLLARS})`,
                   unitPrice: amount,
                   quantity: 1,
                   totalPrice: amount,
@@ -201,7 +224,7 @@ console.log(process.env.STRIPE_WEBHOOK_SECRET)
 
           const existingTxn = await Transaction.findOne({ transactionId: session.payment_intent });
           if (!existingTxn) {
-            const amount = (session.amount_total || 4900) / 100;
+            const amount = (session.amount_total || UNLOCK_FEE_CENTS) / 100;
             const property = await Property.findById(propertyId).select('title');
             const user = await User.findById(userId).select('name');
 

@@ -18,7 +18,7 @@ class EmailService {
     return null;
   }
 
-  async sendEmail(to, subject, html, text = null) {
+  async sendEmail(to, subject, html, text = null, attachments = []) {
     if (!this.transporter) {
       console.warn('Email transporter not configured');
       return false;
@@ -30,7 +30,8 @@ class EmailService {
         to,
         subject,
         html,
-        text: text || html.replace(/<[^>]*>/g, '') // Strip HTML if no text provided
+        text: text || html.replace(/<[^>]*>/g, ''), // Strip HTML if no text provided
+        ...(Array.isArray(attachments) && attachments.length ? { attachments } : {})
       };
 
       const result = await this.transporter.sendMail(mailOptions);

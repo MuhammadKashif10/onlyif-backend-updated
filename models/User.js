@@ -272,7 +272,7 @@ const userSchema = new mongoose.Schema({
     ref: 'Property'
   }],
 
-  // Verified leads: properties this buyer has unlocked (paid $49)
+  // Verified leads: properties this buyer has unlocked (paid $19)
   unlockedProperties: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Property'

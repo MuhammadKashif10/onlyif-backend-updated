@@ -43,6 +43,7 @@ const agentsRoutes = require('./routes/agentsRoutes');
 const paymentRecordRoutes = require('./routes/paymentRecordRoutes');
 const settingsRoutes = require('./routes/settingsRoutes');
 const userRoutes = require('./routes/userRoutes');
+const serviceOrderRoutes = require('./routes/serviceOrderRoutes');
 const socketConnection = require('./config/socketConnection');
 
 // Connect to DB
@@ -182,6 +183,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin/payment-records', paymentRecordRoutes);
 app.use('/api/cash-offers', require('./routes/cashOfferRoutes'));
 app.use('/api/settings', settingsRoutes);
+app.use('/api/service-orders', serviceOrderRoutes);
 
 // 404 Handler
 app.all('*', (req, res) => {

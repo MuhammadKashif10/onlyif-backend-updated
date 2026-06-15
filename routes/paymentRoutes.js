@@ -4,11 +4,12 @@ const Stripe = require('stripe');
 const Purchase = require('../models/Purchase');
 const Property = require('../models/Property');
 const authMiddleware = require('../middleware/authMiddleware');
+const { UNLOCK_FEE_CENTS } = require('../config/pricing');
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// Buyer marketing unlock ($49) — no property. Must be registered BEFORE /checkout/:propertyId
+// Buyer marketing unlock ($19) — no property. Must be registered BEFORE /checkout/:propertyId
 router.post('/checkout/buyer-unlock', authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'buyer') {
@@ -23,7 +24,7 @@ router.post('/checkout/buyer-unlock', authMiddleware, async (req, res) => {
         {
           price_data: {
             currency: 'aud',
-            unit_amount: 4900,
+            unit_amount: UNLOCK_FEE_CENTS,
             product_data: {
               name: 'Only If — Buyer unlock',
               description: 'Serious buyer access to unlock full property details when you choose a listing.',
@@ -88,7 +89,7 @@ router.post('/checkout/:propertyId', authMiddleware, async (req, res) => {
         {
           price_data: {
             currency: 'aud', // Australian Dollars
-            unit_amount: 4900, // 49 AUD (amount in cents)
+            unit_amount: UNLOCK_FEE_CENTS, // buyer property unlock fee (amount in cents)
             product_data: {
               name: `Access property: ${property.title}`
             }
@@ -111,7 +112,7 @@ await Purchase.findOneAndUpdate(
     user: req.user._id,
     property: propertyId,
     paymentIntentId: session.id,
-    amount: 4900,
+    amount: UNLOCK_FEE_CENTS,
     status: 'paid'
   },
   { upsert: true, new: true }
@@ -332,7 +333,7 @@ router.post('/confirm', authMiddleware, async (req, res) => {
         const User = require('../models/User');
         const existingTxn = await Transaction.findOne({ transactionId: session.payment_intent });
         if (!existingTxn) {
-          const amount = (session.amount_total || 4900) / 100;
+          const amount = (session.amount_total || UNLOCK_FEE_CENTS) / 100;
           const property = await Property.findById(session.metadata.propertyId).select('title');
           const txn = new Transaction({
             user: session.metadata.userId,
