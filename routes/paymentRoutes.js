@@ -98,7 +98,7 @@ router.post('/checkout/:propertyId', authMiddleware, async (req, res) => {
         }
       ],
       success_url: `${front}/property/${propertyId}?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${front}/property/${propertyId}?payment=cancelled`,
+      cancel_url: `${front}/buy?payment=cancelled`,
       metadata: {
         type: 'property_unlock',
         userId: req.user._id.toString(),

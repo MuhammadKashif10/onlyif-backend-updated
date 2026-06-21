@@ -714,6 +714,11 @@ const getPropertyById = async (req, res) => {
     ));
     const canViewSellerContact = isAdmin || isOwner || isAssignedAgent;
 
+    // Paid-content gate: only owners/agents/admins, or buyers who have actually
+    // paid (Purchase status 'paid' / Transaction 'succeeded'), may see the full
+    // listing. `showFull` already encodes exactly that check, so reuse it.
+    const isUnlocked = showFull;
+
     const normalizedProperty = {
       id: propertyObj._id.toString(),
       _id: propertyObj._id.toString(),
@@ -732,9 +737,11 @@ const getPropertyById = async (req, res) => {
       yearBuilt: propertyObj.yearBuilt || null,
       propertyType: propertyObj.propertyType || '',
       status: propertyObj.status || 'pending',
-      description: propertyObj.description || '',
-      features: propertyObj.features || [],
-      images: propertyObj.images || [],
+      // Gated paid content — hidden until unlocked. Preview-safe fields
+      // (title, price, beds/baths, approximate address, main image) stay visible.
+      description: isUnlocked ? (propertyObj.description || '') : '',
+      features: isUnlocked ? (propertyObj.features || []) : [],
+      images: isUnlocked ? (propertyObj.images || []) : [],
       mainImage: mainImageUrl,
       coordinates: coordinates,
       contactPhone: canViewSellerContact ? contactPhone : null,
@@ -742,8 +749,9 @@ const getPropertyById = async (req, res) => {
       dateListed: propertyObj.dateListed || propertyObj.createdAt,
       daysOnMarket: propertyObj.daysOnMarket || 0,
       slug: propertyObj.slug, // Include slug in response
-      agent: resolvedAgent,
-      agentAssigned: !!resolvedAgent
+      agent: isUnlocked ? resolvedAgent : null,
+      agentAssigned: isUnlocked ? !!resolvedAgent : false,
+      isUnlocked
     };
 
     res.json(
