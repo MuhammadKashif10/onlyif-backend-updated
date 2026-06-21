@@ -105,7 +105,10 @@ router.post('/checkout/:propertyId', authMiddleware, async (req, res) => {
         propertyId: propertyId
       }
     });
-// Save or update pending purchase
+// Save or update pending purchase.
+// IMPORTANT: never mark as 'paid' here — payment is only confirmed by the
+// Stripe webhook (checkout.session.completed). This record stays 'pending'
+// until that webhook flips it to 'paid'.
 await Purchase.findOneAndUpdate(
   { user: req.user._id, property: propertyId },
   {
@@ -113,7 +116,7 @@ await Purchase.findOneAndUpdate(
     property: propertyId,
     paymentIntentId: session.id,
     amount: UNLOCK_FEE_CENTS,
-    status: 'paid'
+    status: 'pending'
   },
   { upsert: true, new: true }
 );
