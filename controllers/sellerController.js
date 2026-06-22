@@ -151,7 +151,7 @@ const getSellerListings = async (req, res) => {
 
     // Populate agents.agent, and then shape assignedAgent for UI
     const propertiesRaw = await Property.find(filter)
-      .select('title address price status images dateListed viewCount owner agents beds baths squareMeters propertyType')
+      .select('title address price status images dateListed viewCount owner agents beds baths squareMeters propertyType description contactInfo yearBuilt lotSize isInvestmentProperty occupancyStatus tenantDetails monthlyRent leaseEndDate availableFromDate settlementAfterDate propertyDocuments')
       .populate('agents.agent', 'name email avatar phone')
       .sort({ dateListed: -1 })
       .skip(skip)
