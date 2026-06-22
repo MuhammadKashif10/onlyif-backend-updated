@@ -2079,7 +2079,8 @@ const addPropertyDocuments = async (req, res) => {
       type: validTypes.includes(requestedType) ? requestedType : 'Other',
       uploadedAt: new Date(),
       publicId: file.filename,            // Cloudinary public_id for later deletion
-      resourceType: file.mimetype === 'application/pdf' ? 'raw' : 'image'
+      // Stored with resource_type 'auto' → delivered as image-type for pdf/png/jpg.
+      resourceType: file.resource_type || 'image'
     };
   });
 

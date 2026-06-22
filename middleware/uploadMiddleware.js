@@ -134,16 +134,17 @@ const uploadFields = (req, res, next) => {
 // never touched. Accepts PDF / PNG / JPG only, stored in a documents folder.
 // ──────────────────────────────────────────────────────────────────────────
 
-// Map a mimetype to a deterministic Cloudinary resource_type so that uploads
-// and deletes agree exactly (PDFs as 'raw', images as 'image').
-const documentResourceType = (mimetype) =>
-  mimetype === 'application/pdf' ? 'raw' : 'image';
+// All document types (PDF/PNG/JPG) are stored with resource_type 'auto'.
+// Cloudinary then delivers them as image-type assets whose URL keeps the
+// original extension (e.g. .pdf/.png/.jpg) — essential so downloads retain
+// the correct format. (Raw storage would drop the extension on download.)
+const documentResourceType = () => 'image';
 
 const documentStorage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => ({
     folder: 'real-estate/properties/documents',
-    resource_type: documentResourceType(file.mimetype),
+    resource_type: 'auto',
     allowed_formats: ['pdf', 'png', 'jpg', 'jpeg']
   })
 });
