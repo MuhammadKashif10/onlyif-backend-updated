@@ -2038,6 +2038,22 @@ const canManageProperty = (user, property) => (
   (property.assignedAgent && user.id === property.assignedAgent.toString())
 );
 
+// @desc    Get the current documents for a property
+// @route   GET /api/properties/:id/documents
+// @access  Private (Owner/Admin/Assigned Agent)
+const getPropertyDocuments = async (req, res) => {
+  const property = await Property.findById(req.params.id).select('propertyDocuments owner assignedAgent');
+  if (!property) {
+    return res.status(404).json(errorResponse('Property not found', 404));
+  }
+
+  if (!canManageProperty(req.user, property)) {
+    return res.status(403).json(errorResponse('Not authorized to view documents for this property', 403));
+  }
+
+  res.json(successResponse(property.propertyDocuments || [], 'Documents fetched successfully'));
+};
+
 // @desc    Upload one or more documents for a property
 // @route   POST /api/properties/:id/documents
 // @access  Private (Owner/Admin/Assigned Agent)
@@ -2139,6 +2155,7 @@ module.exports = {
   createProperty,
   updateProperty,
   deleteProperty,
+  getPropertyDocuments,
   addPropertyDocuments,
   deletePropertyDocument,
   assignAgent,

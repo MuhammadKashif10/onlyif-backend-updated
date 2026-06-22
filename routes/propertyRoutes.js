@@ -23,6 +23,7 @@ const {
   approveProperty,
   rejectProperty,
   updatePropertySalesStatus,  // Add new sales status update import
+  getPropertyDocuments,
   addPropertyDocuments,
   deletePropertyDocument
 } = require('../controllers/propertyController');
@@ -45,6 +46,7 @@ router.put('/:id', authMiddleware, asyncHandler(updateProperty));
 router.delete('/:id', authMiddleware, asyncHandler(deleteProperty));
 router.post('/:id/assign-agent', authMiddleware, asyncHandler(assignAgent));
 // Per-property document management (separate pipeline from image uploads)
+router.get('/:id/documents', authMiddleware, asyncHandler(getPropertyDocuments));
 router.post('/:id/documents', authMiddleware, uploadDocuments, asyncHandler(addPropertyDocuments));
 router.delete('/:id/documents/:docId', authMiddleware, asyncHandler(deletePropertyDocument));
 // Admin approval and rejection routes
