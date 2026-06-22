@@ -6,6 +6,7 @@ const corelogicService = require('../services/corelogicService');
 const emailService = require('../services/emailService');
 const { successResponse, errorResponse, paginationMeta } = require('../utils/responseFormatter');
 const Purchase = require('../models/Purchase');
+const cloudinary = require('../config/cloudinary');
 const { notifyBuyersAboutNewProperty, notifyBuyersAboutPriceDrop } = require('./notificationController');
 
 // @desc    Update property sales status (Professional Implementation)
@@ -441,8 +442,11 @@ const createProperty = async (req, res) => {
     // Extract form data properly
     const {
       title, street, city, state, zipCode, price, beds, baths,
-      squareMeters, propertyType, description, contactName, 
-      contactEmail, contactPhone, yearBuilt, lotSize, carSpaces
+      squareMeters, propertyType, description, contactName,
+      contactEmail, contactPhone, yearBuilt, lotSize, carSpaces,
+      // New optional investment / availability fields (multipart strings)
+      isInvestmentProperty, occupancyStatus, tenantDetails, monthlyRent,
+      leaseEndDate, availableFromDate, settlementAfterDate, propertyDocuments
     } = req.body;
 
     // Validate required fields
@@ -484,7 +488,23 @@ const createProperty = async (req, res) => {
       },
       status: 'pending',
       yearBuilt: yearBuilt ? parseInt(yearBuilt) : undefined,
-      lotSize: lotSize ? parseFloat(lotSize) : undefined
+      lotSize: lotSize ? parseFloat(lotSize) : undefined,
+
+      // ── New optional investment / availability fields ──
+      // All undefined-safe: when omitted, the value stays undefined so the
+      // schema defaults (occupancyStatus: 'vacant', isInvestmentProperty: false)
+      // apply, keeping older frontend requests fully backward-compatible.
+      isInvestmentProperty:
+        isInvestmentProperty !== undefined
+          ? (isInvestmentProperty === true || isInvestmentProperty === 'true')
+          : undefined,
+      occupancyStatus: occupancyStatus || undefined,
+      tenantDetails: tenantDetails ? String(tenantDetails).trim() : undefined,
+      monthlyRent: monthlyRent ? parseFloat(monthlyRent) : undefined,
+      leaseEndDate: leaseEndDate || undefined,
+      availableFromDate: availableFromDate || undefined,
+      settlementAfterDate: settlementAfterDate || undefined,
+      propertyDocuments: Array.isArray(propertyDocuments) ? propertyDocuments : []
     };
 
     // Handle image uploads from req.files (Cloudinary via multer-storage-cloudinary)
@@ -751,6 +771,16 @@ const getPropertyById = async (req, res) => {
       slug: propertyObj.slug, // Include slug in response
       agent: isUnlocked ? resolvedAgent : null,
       agentAssigned: isUnlocked ? !!resolvedAgent : false,
+      // Investment / availability attributes (preview-safe; default-safe for old data)
+      isInvestmentProperty: propertyObj.isInvestmentProperty || false,
+      occupancyStatus: propertyObj.occupancyStatus || 'vacant',
+      tenantDetails: propertyObj.tenantDetails || '',
+      monthlyRent: propertyObj.monthlyRent ?? null,
+      leaseEndDate: propertyObj.leaseEndDate || null,
+      availableFromDate: propertyObj.availableFromDate || null,
+      settlementAfterDate: propertyObj.settlementAfterDate || null,
+      // Per-property documents — gated with other rich content; defaults to []
+      propertyDocuments: isUnlocked ? (propertyObj.propertyDocuments || []) : [],
       isUnlocked
     };
 
@@ -2000,12 +2030,116 @@ const markPropertyAsSettled = async (req, res) => {
   }
 };
 
+// Shared permission check — mirrors updateProperty (owner / admin / assigned agent).
+const canManageProperty = (user, property) => (
+  user.id === property.owner.toString() ||
+  user.role === 'admin' ||
+  (user.roles && user.roles.includes('admin')) ||
+  (property.assignedAgent && user.id === property.assignedAgent.toString())
+);
+
+// @desc    Upload one or more documents for a property
+// @route   POST /api/properties/:id/documents
+// @access  Private (Owner/Admin/Assigned Agent)
+const addPropertyDocuments = async (req, res) => {
+  const property = await Property.findById(req.params.id);
+  if (!property) {
+    return res.status(404).json(errorResponse('Property not found', 404));
+  }
+
+  if (!canManageProperty(req.user, property)) {
+    return res.status(403).json(errorResponse('Not authorized to manage documents for this property', 403));
+  }
+
+  if (!req.files || req.files.length === 0) {
+    return res.status(400).json(errorResponse('No documents were uploaded', 400));
+  }
+
+  // `types` may arrive as a JSON array string, a repeated field (array), a single
+  // value, or be absent. Normalize to an array aligned with the uploaded files.
+  let types = [];
+  try {
+    if (typeof req.body.types === 'string' && req.body.types.trim().startsWith('[')) {
+      types = JSON.parse(req.body.types);
+    } else if (Array.isArray(req.body.types)) {
+      types = req.body.types;
+    } else if (req.body.types) {
+      types = [req.body.types];
+    }
+  } catch (e) {
+    types = [];
+  }
+
+  const validTypes = ['SOI', 'Contract', 'Other'];
+  const newDocs = req.files.map((file, idx) => {
+    const requestedType = types[idx];
+    return {
+      fileUrl: file.path,                 // Cloudinary secure URL
+      fileName: file.originalname,
+      type: validTypes.includes(requestedType) ? requestedType : 'Other',
+      uploadedAt: new Date(),
+      publicId: file.filename,            // Cloudinary public_id for later deletion
+      resourceType: file.mimetype === 'application/pdf' ? 'raw' : 'image'
+    };
+  });
+
+  const updated = await Property.findByIdAndUpdate(
+    req.params.id,
+    { $push: { propertyDocuments: { $each: newDocs } } },
+    { new: true, runValidators: true }
+  );
+
+  res.json(successResponse(updated.propertyDocuments, 'Documents uploaded successfully'));
+};
+
+// @desc    Delete a single document from a property
+// @route   DELETE /api/properties/:id/documents/:docId
+// @access  Private (Owner/Admin/Assigned Agent)
+const deletePropertyDocument = async (req, res) => {
+  const { id, docId } = req.params;
+
+  const property = await Property.findById(id);
+  if (!property) {
+    return res.status(404).json(errorResponse('Property not found', 404));
+  }
+
+  if (!canManageProperty(req.user, property)) {
+    return res.status(403).json(errorResponse('Not authorized to manage documents for this property', 403));
+  }
+
+  const doc = property.propertyDocuments.id(docId);
+  if (!doc) {
+    return res.status(404).json(errorResponse('Document not found', 404));
+  }
+
+  // Best-effort Cloudinary cleanup; never block the DB removal if it fails.
+  if (doc.publicId) {
+    try {
+      await cloudinary.uploader.destroy(doc.publicId, {
+        resource_type: doc.resourceType || 'image'
+      });
+    } catch (err) {
+      console.error('⚠️ Cloudinary destroy failed (continuing with DB removal):', err.message);
+    }
+  }
+
+  const updated = await Property.findByIdAndUpdate(
+    id,
+    { $pull: { propertyDocuments: { _id: docId } } },
+    { new: true }
+  );
+
+  res.json(successResponse(updated.propertyDocuments, 'Document deleted successfully'));
+};
+
 module.exports = {
   getAllProperties,
   getPropertyById,
   createProperty,
   updateProperty,
   deleteProperty,
+  addPropertyDocuments,
+  deletePropertyDocument,
   assignAgent,
   getPriceCheck,
   getSellerProperties,

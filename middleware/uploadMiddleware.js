@@ -128,6 +128,62 @@ const uploadFields = (req, res, next) => {
   });
 };
 
+// ──────────────────────────────────────────────────────────────────────────
+// Documents pipeline (SEPARATE from images/floorplans/videos above).
+// Dedicated storage + multer instance so the existing image upload flow is
+// never touched. Accepts PDF / PNG / JPG only, stored in a documents folder.
+// ──────────────────────────────────────────────────────────────────────────
+
+// Map a mimetype to a deterministic Cloudinary resource_type so that uploads
+// and deletes agree exactly (PDFs as 'raw', images as 'image').
+const documentResourceType = (mimetype) =>
+  mimetype === 'application/pdf' ? 'raw' : 'image';
+
+const documentStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: 'real-estate/properties/documents',
+    resource_type: documentResourceType(file.mimetype),
+    allowed_formats: ['pdf', 'png', 'jpg', 'jpeg']
+  })
+});
+
+const documentFileFilter = (req, file, cb) => {
+  const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`Invalid document type: ${file.mimetype}. Only PDF, PNG and JPG are allowed.`), false);
+  }
+};
+
+const documentUpload = multer({
+  storage: documentStorage,
+  fileFilter: documentFileFilter,
+  limits: {
+    fileSize: 25 * 1024 * 1024, // 25MB per document
+    files: 10                    // up to 10 documents per request
+  }
+});
+
+// Accepts multiple files under the `documents` field.
+const uploadDocuments = (req, res, next) => {
+  const handler = documentUpload.array('documents', 10);
+  handler(req, res, (err) => {
+    if (err) {
+      console.error('❌ Document upload error:', err.message);
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        return res.status(400).json({ success: false, error: 'File too large', message: 'Each document must be 25MB or smaller.' });
+      }
+      if (err.code === 'LIMIT_FILE_COUNT') {
+        return res.status(400).json({ success: false, error: 'Too many files', message: 'A maximum of 10 documents can be uploaded at once.' });
+      }
+      return res.status(400).json({ success: false, error: 'Document upload failed', message: err.message || 'An error occurred during document upload.' });
+    }
+    next();
+  });
+};
+
 // Single upload middleware for profile image (agents)
 const uploadProfileImage = (req, res, next) => {
   const singleHandler = upload.single('profileImage');
@@ -143,4 +199,4 @@ const uploadProfileImage = (req, res, next) => {
   });
 };
 
-module.exports = { uploadFields, uploadProfileImage };
+module.exports = { uploadFields, uploadProfileImage, uploadDocuments, documentResourceType };

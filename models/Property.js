@@ -145,6 +145,65 @@ const propertySchema = new mongoose.Schema({
     }
   },
 
+  // ── Investment / occupancy info (all OPTIONAL — additive, non-breaking) ──
+  isInvestmentProperty: {
+    type: Boolean,
+    default: false
+  },
+  occupancyStatus: {
+    type: String,
+    enum: ['vacant', 'tenanted', 'investment'],
+    default: 'vacant'
+  },
+  tenantDetails: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Tenant details cannot exceed 1000 characters']
+  },
+  monthlyRent: {
+    type: Number,
+    min: [0, 'Monthly rent cannot be negative']
+  },
+  leaseEndDate: {
+    type: Date
+  },
+
+  // ── Availability model (reusable across all listing types — OPTIONAL) ──
+  availableFromDate: {
+    type: Date
+  },
+  settlementAfterDate: {
+    type: Date
+  },
+
+  // ── Per-listing documents (OPTIONAL array; sub-doc _id auto-generated) ──
+  propertyDocuments: [{
+    fileUrl: {
+      type: String,
+      required: [true, 'Document fileUrl is required']
+    },
+    fileName: {
+      type: String,
+      required: [true, 'Document fileName is required']
+    },
+    type: {
+      type: String,
+      enum: ['SOI', 'Contract', 'Other'],
+      default: 'Other'
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    // Optional Cloudinary metadata for reliable deletion (additive, backward-compatible)
+    publicId: {
+      type: String
+    },
+    resourceType: {
+      type: String
+    }
+  }],
+
   images: [{
     url: {
       type: String,

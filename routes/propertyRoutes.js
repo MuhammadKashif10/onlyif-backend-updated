@@ -3,7 +3,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware');
 const optionalAuth = require('../middleware/authMiddleware').optionalAuth;
 const { asyncHandler } = require('../middleware/errorHandler');
-const { uploadFields } = require('../middleware/uploadMiddleware');
+const { uploadFields, uploadDocuments } = require('../middleware/uploadMiddleware');
 
 // Import all controller functions
 const {
@@ -22,7 +22,9 @@ const {
   createPropertyWithFiles,
   approveProperty,
   rejectProperty,
-  updatePropertySalesStatus  // Add new sales status update import
+  updatePropertySalesStatus,  // Add new sales status update import
+  addPropertyDocuments,
+  deletePropertyDocument
 } = require('../controllers/propertyController');
 
 // Public routes
@@ -42,6 +44,9 @@ router.post('/upload', authMiddleware, uploadFields, asyncHandler(createProperty
 router.put('/:id', authMiddleware, asyncHandler(updateProperty));
 router.delete('/:id', authMiddleware, asyncHandler(deleteProperty));
 router.post('/:id/assign-agent', authMiddleware, asyncHandler(assignAgent));
+// Per-property document management (separate pipeline from image uploads)
+router.post('/:id/documents', authMiddleware, uploadDocuments, asyncHandler(addPropertyDocuments));
+router.delete('/:id/documents/:docId', authMiddleware, asyncHandler(deletePropertyDocument));
 // Admin approval and rejection routes
 router.patch('/:id/approve', authMiddleware, asyncHandler(approveProperty));
 router.patch('/:id/reject', authMiddleware, asyncHandler(rejectProperty));
