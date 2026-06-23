@@ -178,13 +178,14 @@ const getSellerListings = async (req, res) => {
     const properties = propertiesRaw.map((p) => {
       const activeAgentEntry = Array.isArray(p.agents) ? p.agents.find((a) => a.isActive) : null;
   
-      // Compute size in sqft when only squareMeters is available
-      const sizeSqft = p.size ?? (p.squareMeters ? Math.round(Number(p.squareMeters) * 10.7639) : undefined);
-  
+      // Return raw squareMeters (sqm is the canonical unit, consistent with
+      // propertyController). Keep legacy `p.size` as an unconverted fallback.
+      const size = p.squareMeters ?? p.size ?? 0;
+
       const pid = p._id.toString();
       return {
         ...p,
-        size: sizeSqft,
+        size: size,
         assignedAgent: activeAgentEntry?.agent || null,
         assignedDate: activeAgentEntry?.assignedAt || null,
         buyerActivity: {
